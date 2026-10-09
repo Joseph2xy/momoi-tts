@@ -11,6 +11,8 @@ Updated: 2026-10-09. Read [AGENTS.md](AGENTS.md) first. [README](README.md) owns
 
 ## Current state
 
+Repository: [Joseph2xy/placeholder](https://github.com/Joseph2xy/placeholder), private, with `origin` configured. The user chose a temporary placeholder name; final repository/app naming remains deferred. The existing `master` branch contains the initial project commit.
+
 One isolated activity-feed preview is retained at http://127.0.0.1:5174/designs.html (run command in README). It uses synthetic state, no real audio or provider/Twitch calls; the existing functional frontend remains in use. Superseded layouts, dead preview controls/hooks, redundant styles, and duplicate design notes have been removed. The Vite review server is left running.
 
 ### Frontend direction
