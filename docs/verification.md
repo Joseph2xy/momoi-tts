@@ -43,18 +43,23 @@ and strict server/browser TypeScript, plus `prototype:check`, formatting, and wh
 checks for the refined React prototype. The production build includes only its existing
 management and testing pages.
 
-T3 browser interaction checks for the refined transcript feed verified pause, skip
-advancing the sample queue while preserving pause, waiting-response exclusion,
+T3 browser DOM-dispatched clicks for the question-first revision verified pause,
+skip advancing the sample queue while preserving pause, waiting-response exclusion,
 waiting removal and its updated history outcome, mute, exhausted-queue feedback,
-disabled skip without a current message, and reset. Playback/remove controls measure
-36px high. Browser inspection found no audio element, nested buttons, or `/api/`
-resource requests. These are synthetic interactions, not live queue evidence.
+and disabled skip without a current message. Reload restored the samples. Browser
+inspection confirmed the preview banner is absent, headings use white 16–17px type,
+and there is no audio element, nested button, or `/api/` resource request. These are
+synthetic interactions, not live queue evidence. Pointer-click automation returned
+success without changing state, so it does not establish pointer interaction coverage.
 
-Script-free DOM/stylesheet copies had no horizontal overflow at 320, 390, 600, and
-1024 CSS pixels; remove controls fit within their rows. At 320px the transport wraps
-to two lines. This is limited layout evidence. Direct resizing remains unverified;
-snapshot capture failed for this revision, so it has no fresh screenshot-based visual
-verification.
+DOM scrolling moved history while page scroll remained zero and the current panel
+and history heading stayed stationary. Script-free DOM/stylesheet copies at
+1280x800, 600x700, 390x844, and 320x568 had no page overflow and exactly one scrollable
+region: the history list. Long synthetic questions kept that region within the viewport
+with positive height. Current/upcoming previews are bounded; history text is complete.
+These copies provide limited layout evidence, not mobile interaction coverage. Direct
+resizing remains unverified. Snapshot capture failed for this revision, so it has no
+fresh screenshot-based visual verification.
 
 ## Packaging evidence
 

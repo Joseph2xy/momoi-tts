@@ -1,12 +1,22 @@
-// Throwaway review: one message feed, with a stronger current-response hierarchy.
-// Charcoal/coral, Outfit headings, plain queue rows, persistent playback controls.
-// [controls] [current transcript] [upcoming questions] [recent transcripts]
+// Throwaway review: questions lead; current/queue stay fixed; only history scrolls.
+// Charcoal/coral, distinct live and history surfaces, readable section headings.
+// [controls] [current question + reply preview] [upcoming] [scrolling history]
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AudioLines, Pause, Play, Settings, SkipForward, Volume2, VolumeX, X } from 'lucide-react';
+import {
+  AudioLines,
+  History,
+  ListOrdered,
+  Pause,
+  Play,
+  Settings,
+  SkipForward,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Badge } from './components/ui/badge';
-import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from './components/ui/empty';
 import { cn } from './lib/utils';
 import './style.css';
 
@@ -140,7 +150,11 @@ function Controls({ model }: { model: Model }) {
 
 function Status({ entry }: { entry: Entry }) {
   return (
-    <Badge variant={entry.kind === 'current' ? 'speaking' : 'quiet'}>
+    <Badge
+      variant={
+        entry.kind === 'current' ? 'speaking' : entry.status === 'Answered' ? 'complete' : 'quiet'
+      }
+    >
       {entry.kind === 'current' && entry.status === 'Speaking' ? (
         <AudioLines aria-hidden="true" />
       ) : null}
@@ -153,13 +167,12 @@ function Transcript({ entry }: { entry: Entry }) {
   const hasResponse = entry.kind !== 'waiting' && !!entry.response;
   return (
     <div className="transcript">
-      <p className={cn('question', hasResponse && 'context-question')}>
-        <span className="viewer">{entry.viewer}</span>{' '}
-        <span className="question-text">{entry.question}</span>
+      <p className="question" title={entry.kind !== 'past' ? entry.question : undefined}>
+        {entry.question}
       </p>
       {hasResponse ? (
         <div className="response">
-          <span className="speaker">Tyrone</span>
+          <span className="speaker">Tyrone’s reply</span>
           <p className="spoken-response">{entry.response}</p>
         </div>
       ) : null}
@@ -173,18 +186,12 @@ function FeedEntry({ entry, model }: { entry: Entry; model: Model }) {
       className={cn('feed-entry', entry.kind + '-entry')}
       aria-label={entry.status + ': ' + entry.viewer}
     >
-      {entry.kind !== 'waiting' ? (
-        <div className="entry-meta">
-          <Status entry={entry} />
-          <time>{entry.time}</time>
-        </div>
-      ) : null}
-      {entry.kind === 'waiting' ? (
-        <div className="waiting-meta">
-          <Status entry={entry} />
-          <time>{entry.time}</time>
-        </div>
-      ) : null}
+      <div className="entry-meta">
+        <span className="viewer">{entry.viewer}</span>
+        <span className="destination">to Tyrone</span>
+        <time>{entry.time}</time>
+        {entry.kind !== 'current' ? <Status entry={entry} /> : null}
+      </div>
       <Transcript entry={entry} />
       {entry.kind === 'waiting' ? (
         <Button
@@ -253,73 +260,74 @@ function App() {
       setNotice('Question removed from the queue.');
     },
   };
-  function reset() {
-    setSession({ current: sampleCurrent, waiting: sampleWaiting, history: sampleHistory });
-    setPaused(false);
-    setMuted(false);
-    setVolume(80);
-    setNotice('Samples reset.');
-  }
   return (
-    <>
-      <div className="review-note">
-        <span>Design preview · Sample messages, no audio</span>
-        <button onClick={reset}>Reset samples</button>
-      </div>
-      <main className="utility">
-        <Controls model={model} />
-        <div className="message-feed">
+    <main className="utility">
+      <Controls model={model} />
+      <section className="now-playing" aria-labelledby="current-heading">
+        <div className="section-header">
+          <h2 id="current-heading">Now playing</h2>
           {current ? (
-            <FeedEntry
+            <Status
               entry={{ ...current, kind: 'current', status: paused ? 'Paused' : 'Speaking' }}
+            />
+          ) : null}
+        </div>
+        {current ? (
+          <FeedEntry
+            entry={{ ...current, kind: 'current', status: paused ? 'Paused' : 'Speaking' }}
+            model={model}
+          />
+        ) : (
+          <div className="queue-empty">
+            <p>{paused ? 'Playback paused' : 'All caught up'}</p>
+            <span>
+              {paused
+                ? 'Resume when you’re ready for new messages.'
+                : 'New questions will appear here.'}
+            </span>
+          </div>
+        )}
+      </section>
+      <section className="upcoming" aria-labelledby="upcoming-heading">
+        <div className="section-header">
+          <h2 id="upcoming-heading">
+            <ListOrdered aria-hidden="true" />
+            Up next
+          </h2>
+        </div>
+        {waiting.length ? (
+          waiting.map((entry, i) => (
+            <FeedEntry
+              key={entry.id}
+              entry={{ ...entry, kind: 'waiting', status: i === 0 ? 'Next' : 'Waiting' }}
               model={model}
             />
-          ) : (
-            <Empty>
-              <EmptyHeader>
-                <EmptyTitle>{paused ? 'Playback paused' : 'All caught up'}</EmptyTitle>
-                <EmptyDescription>
-                  {paused
-                    ? 'Resume when you’re ready for the next message.'
-                    : 'New messages will appear here.'}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          )}
-          {waiting.length ? (
-            <section className="upcoming" aria-labelledby="upcoming-heading">
-              <h2 id="upcoming-heading" className="feed-heading">
-                Up next
-              </h2>
-              {waiting.map((entry, i) => (
-                <FeedEntry
-                  key={entry.id}
-                  entry={{ ...entry, kind: 'waiting', status: i === 0 ? 'Next' : 'Waiting' }}
-                  model={model}
-                />
-              ))}
-            </section>
-          ) : null}
-          {history.length ? (
-            <section className="history" aria-labelledby="history-heading">
-              <h2 id="history-heading" className="feed-heading">
-                Earlier
-              </h2>
-              {history.map((entry) => (
-                <FeedEntry
-                  key={entry.id}
-                  entry={{ ...entry, kind: 'past', status: entry.outcome ?? 'Answered' }}
-                  model={model}
-                />
-              ))}
-            </section>
-          ) : null}
+          ))
+        ) : (
+          <p className="waiting-empty">No questions waiting.</p>
+        )}
+      </section>
+      <section className="history" aria-labelledby="history-heading">
+        <div className="section-header history-header">
+          <h2 id="history-heading">
+            <History aria-hidden="true" />
+            History
+          </h2>
         </div>
-        <div className="footer-status" role="status">
-          {notice}
+        <div className="history-list" tabIndex={0} role="region" aria-label="Message history">
+          {history.map((entry) => (
+            <FeedEntry
+              key={entry.id}
+              entry={{ ...entry, kind: 'past', status: entry.outcome ?? 'Answered' }}
+              model={model}
+            />
+          ))}
         </div>
-      </main>
-    </>
+      </section>
+      <div className="sr-only" role="status">
+        {notice}
+      </div>
+    </main>
   );
 }
 createRoot(document.getElementById('root')!).render(<App />);

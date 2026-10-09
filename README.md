@@ -66,9 +66,10 @@ The retained intake uses one shared `Name: question` reward, completion fulfillm
 
 On branch `prototype/activity-layouts`, run `npm run prototype:ui` and open
 [message feed preview](http://127.0.0.1:3222/prototype.html). The review refines the
-preferred transcript-feed direction with an emphasized current reply, compact upcoming
-questions, and inline recent transcripts. Skip, pause, mute and removal are simulated
-in memory; **Reset samples** restores the initial state. Settings
+preferred transcript-feed direction with questions first, stationary current/upcoming
+work, and a separately scrolling history list. Current/upcoming text uses bounded
+previews; history shows full questions and replies inline. Skip, pause, mute and removal
+are simulated in memory; reloading restores the samples. Settings
 and actual playback are outside this review. No backend server, credentials or provider
 access is needed. The prototype page is excluded from the production Vite build.
 `npm run prototype:check` checks its React TypeScript code. Stop the review with Ctrl+C.
