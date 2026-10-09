@@ -2,14 +2,21 @@ param([switch]$Demo, [switch]$NoOpen)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 try {
-    $nodeCommand = Get-Command node -ErrorAction Stop
-    $nodeVersion = & $nodeCommand.Source -p 'process.versions.node'
-    if ([version]$nodeVersion -lt [version]'24.12.0') { throw 'Node.js 24.12 or newer is required.' }
+    $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+    $readyNode = $false
+    if ($nodeCommand) {
+        $nodeVersion = & $nodeCommand.Source -p 'process.versions.node'
+        $readyNode = $LASTEXITCODE -eq 0 -and [version]$nodeVersion -ge [version]'24.12.0'
+    }
+    if (-not $readyNode -or -not (Test-Path -LiteralPath (Join-Path $projectRoot 'node_modules/vite/package.json'))) {
+        & (Join-Path $PSScriptRoot 'setup.ps1') -Demo:$Demo -NoOpen:$NoOpen
+        exit $LASTEXITCODE
+    }
     $privateRoot = Join-Path $projectRoot '.local'
     New-Item -ItemType Directory -Path $privateRoot -Force | Out-Null
     $logPath = Join-Path $privateRoot 'launcher.log'
     $errorPath = Join-Path $privateRoot 'launcher-error.log'
-    $nodeArgs = @('--env-file-if-exists=.local/generation.env', '--env-file-if-exists=.local/fish.env', '--env-file-if-exists=.local/twitch.env', 'scripts/launch/launch.ts')
+    $nodeArgs = @('scripts/launch/launch.ts')
     if ($Demo) { $nodeArgs += '--demo' }
     if ($NoOpen) { $nodeArgs += '--no-open' }
     $launcherProcess = Start-Process -FilePath $nodeCommand.Source -ArgumentList $nodeArgs -WorkingDirectory $projectRoot -WindowStyle Hidden -RedirectStandardOutput $logPath -RedirectStandardError $errorPath -PassThru

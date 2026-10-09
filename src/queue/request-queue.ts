@@ -14,6 +14,8 @@ interface QueueDependencies {
   now?: () => number;
 }
 interface Job {
+  pipeline?: QueuePipeline;
+  fixedPipeline?: QueuePipeline;
   entry: RequestEntry;
   character: CharacterProfile;
   controller: AbortController;
@@ -69,15 +71,23 @@ export class RequestQueue {
       this.#finishedListeners.delete(listener);
     };
   }
+  setPipeline(pipeline: QueuePipeline | undefined): void {
+    this.#deps.pipeline = pipeline;
+  }
   cancel(id: string): void {
     if (this.#active?.entry.id === id) {
       this.#cancelActive('skipped');
       this.#pump();
     } else if (this.#waiting.some((job) => job.entry.id === id)) this.remove(id);
   }
-  submit(viewer: unknown, question: unknown, eventId: unknown): string {
-    if (!this.#deps.pipeline)
-      throw new RequestInputError('Question generation is unavailable in this mode.');
+  submit(
+    viewer: unknown,
+    question: unknown,
+    eventId: unknown,
+    fixedPipeline?: QueuePipeline,
+  ): string {
+    const pipeline = fixedPipeline ?? this.#deps.pipeline;
+    if (!pipeline) throw new RequestInputError('Question generation is unavailable in this mode.');
     if (
       typeof viewer !== 'string' ||
       !viewer.trim() ||
@@ -90,7 +100,7 @@ export class RequestQueue {
     this.tick();
     const previous = this.#events.get(eventId);
     if (previous) return previous.id;
-    const { character, question: text } = selectCharacter(question, this.#deps.pipeline.characters);
+    const { character, question: text } = selectCharacter(question, pipeline.characters);
     const name = viewer.trim();
     this.#checkCapacity(name);
     const now = this.#now();
@@ -120,6 +130,7 @@ export class RequestQueue {
       entry,
       character: Object.freeze({ ...character }),
       controller: new AbortController(),
+      fixedPipeline,
     });
     return entry.id;
   }
@@ -233,8 +244,19 @@ export class RequestQueue {
     this.#pump();
   }
   #pump(): void {
-    if (this.#paused || this.#active || !this.#waiting.length || !this.#deps.playerReady()) return;
+    if (
+      this.#paused ||
+      this.#active ||
+      !this.#waiting.length ||
+      !this.#deps.playerReady() ||
+      !(this.#waiting[0]?.fixedPipeline ?? this.#deps.pipeline)
+    )
+      return;
     const job = this.#waiting.shift()!;
+    job.pipeline = job.fixedPipeline ?? this.#deps.pipeline;
+    // Keep the accepted character identity; apply its latest voice before work starts.
+    const latest = job.pipeline!.characters.find((profile) => profile.id === job.character.id);
+    if (latest) job.character = Object.freeze({ ...job.character, voiceId: latest.voiceId });
     this.#active = job;
     job.entry.startedAt = this.#now();
     void this.#run(job);
@@ -272,7 +294,7 @@ export class RequestQueue {
     try {
       job.entry.status = 'generating';
       const dialogue = await this.#phase(job, (signal) =>
-        this.#deps.pipeline!.generate(job.entry.question, signal, job.character),
+        job.pipeline!.generate(job.entry.question, signal, job.character),
       );
       if (!this.#current(job)) return;
       if (typeof dialogue !== 'string' || !dialogue.trim() || Buffer.byteLength(dialogue) > 4000)
@@ -280,7 +302,7 @@ export class RequestQueue {
       job.entry.dialogue = dialogue;
       job.entry.status = 'synthesizing';
       const audio = await this.#phase(job, (signal) =>
-        this.#deps.pipeline!.synthesize(dialogue, signal, job.character),
+        job.pipeline!.synthesize(dialogue, signal, job.character),
       );
       if (!this.#current(job)) return;
       if (!Buffer.isBuffer(audio) || !audio.length || audio.length > 5_000_000)

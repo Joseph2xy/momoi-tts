@@ -3,87 +3,212 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#111319" />
-    <title>Stream characters</title>
-    <link rel="stylesheet" href="./style.css" />
+    <meta name="theme-color" content="#171e29" />
+    <title>Stream controls</title>
+    <link rel="stylesheet" href="./management.css" />
     <script type="module" src="./main.ts"></script>
   </head>
   <body>
-    <main>
-      <header>
-        <div>
-          <h1>Stream characters<span>.</span></h1>
-          <p>Viewers choose who answers.</p>
+    <div class="sidebar-shell">
+      <aside class="sidebar">
+        <div class="brand">Stream controls</div>
+        <nav class="navigation" aria-label="Main navigation">
+          <button data-page="activity">Activity</button
+          ><button data-page="connections">Connections</button
+          ><button data-page="settings">Settings</button>
+        </nav>
+        <div class="sidebar-footer">Local app</div>
+      </aside>
+      <main class="workspace">
+        <div class="page-heading">
+          <h1 id="heading">Activity</h1>
+          <span id="connection" class="subtle">Connecting</span>
         </div>
-        <div class="header-status">
-          <span id="mode" class="pill">Connecting</span
-          ><span id="connection" class="connection" data-connected="false">Audio connecting</span>
-        </div>
-      </header>
-      <p id="message" class="error alert" role="alert"></p>
-      <div class="layout">
-        <div class="responses">
-          <section class="player" aria-labelledby="playback-heading">
+        <p id="message" class="error" role="alert"></p>
+        <p id="playback-note" class="hint" role="status"></p>
+        <button id="enable" hidden>Enable audio</button>
+        <section id="activity-page" data-view="activity">
+          <p id="mode" class="hint"></p>
+          <p id="readiness" class="hint"></p>
+          <div class="transport">
+            <div class="transport-main">
+              <button id="pause" class="primary" disabled>Resume</button
+              ><button id="skip" disabled>Skip current</button
+              ><button id="mute" disabled>Mute</button>
+            </div>
+            <details class="menu" id="options">
+              <summary>Options</summary>
+              <div class="menu-panel">
+                <label class="volume" for="volume"
+                  >Volume <output id="volume-value">100%</output></label
+                ><input id="volume" type="range" min="0" max="100" value="100" /><button id="clear">
+                  Clear waiting</button
+                ><button id="stop-clear" class="danger">Stop and clear</button>
+              </div>
+            </details>
+          </div>
+          <div id="playback-progress" hidden>
+            <progress
+              id="progress"
+              aria-label="Speech playback progress"
+              max="1"
+              value="0"
+            ></progress
+            ><span id="progress-time"></span>
+          </div>
+          <p id="detail" class="hint" role="status"></p>
+          <div id="feed" class="feed"></div>
+        </section>
+        <section data-view="connections" hidden>
+          <h2>Twitch</h2>
+          <p class="hint">
+            Twitch connection and Channel Points setup will follow local configuration and playback
+            integration. Local testing works independently.
+          </p>
+        </section>
+        <section data-view="settings" hidden>
+          <p class="settings-note">
+            Save each section separately. The current request keeps its settings; waiting questions
+            stay queued.
+          </p>
+          <p id="overrides" class="hint"></p>
+          <nav class="settings-index" aria-label="Settings sections">
+            <a href="#generation">Generation</a><a href="#speech">Speech</a
+            ><a href="#characters">Characters</a><a href="#playback-settings">Playback</a
+            ><a href="#application">Application</a>
+          </nav>
+          <form class="setting-section" id="generation" data-section="generation">
             <div class="section-heading">
-              <h2 id="playback-heading">Playback</h2>
-              <span id="status" class="pill">Idle</span>
+              <h2>Generation</h2>
+              <span id="generation-status" class="subtle"></span>
             </div>
-            <h3 id="clip">No active response</h3>
-            <p id="detail" role="status">Connecting…</p>
-            <p id="playback-note" class="notice" role="status"></p>
-            <button id="enable" hidden>Enable audio</button>
-            <div id="playback-progress" class="playback-progress" hidden>
-              <progress
-                id="progress"
-                aria-label="Speech playback progress"
-                max="1"
-                value="0"
-              ></progress
-              ><span id="progress-time">0:00 / 0:00</span>
+            <label class="field" for="provider"
+              ><span>Provider</span
+              ><select id="provider" name="provider">
+                <option value="">Choose a provider</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="codex">Codex CLI</option>
+              </select></label
+            >
+            <div id="openrouter-fields">
+              <label class="field" for="model"
+                ><span>Exact model ID</span
+                ><input id="model" name="model" autocomplete="off" /></label
+              ><label class="field" for="generation-key"
+                ><span>API key / replacement</span
+                ><input
+                  id="generation-key"
+                  name="key"
+                  type="password"
+                  autocomplete="off"
+                  placeholder="Leave blank to keep the stored key"
+              /></label>
+              <details>
+                <summary>Advanced</summary>
+                <label class="field" for="tokens"
+                  ><span>Maximum tokens (64–16384)</span
+                  ><input id="tokens" name="maxTokens" type="number" min="64" max="16384"
+                /></label>
+              </details>
+              <p class="hint">Initial trials require verified free access. No paid fallback.</p>
             </div>
-            <div class="transport">
-              <button id="pause" aria-pressed="false" disabled>Pause</button
-              ><button id="skip" class="secondary" disabled>Skip current</button
-              ><button id="stop-clear" class="quiet danger" disabled>Stop and clear</button>
+            <div id="codex-fields" hidden>
+              <p class="hint">
+                Prepare Codex separately: install CLI 0.162.0 and sign in using codex login. The app
+                checks the installed version.
+              </p>
+              <div class="actions">
+                <button type="button" data-action="prerequisites">Check prerequisites</button>
+              </div>
+              <p id="prerequisite-result" class="hint" role="status"></p>
             </div>
-            <div class="audio-settings">
-              <button id="mute" class="quiet" aria-pressed="false" disabled>Mute</button
-              ><label for="volume">Volume</label
-              ><input id="volume" type="range" min="0" max="100" value="100" disabled /><output
-                id="volume-value"
-                for="volume"
-                >100%</output
-              >
-            </div>
-          </section>
-          <section class="requests" aria-labelledby="requests-heading">
-            <div class="section-heading">
-              <h2 id="requests-heading">Requests</h2>
-              <span id="queue-count" class="count">0 active · 0/2 waiting</span
-              ><button id="clear" class="quiet small" disabled>Clear waiting</button>
-            </div>
-            <p id="queue-note" class="help" role="status"></p>
-            <div id="feed"><p class="empty">No requests yet.</p></div>
-          </section>
-        </div>
-        <aside>
-          <details class="twitch">
-            <summary>
-              Twitch connection <span id="twitch-status" class="pill">Disconnected</span>
-            </summary>
-            <p id="twitch-detail" class="help">Loading connection status…</p>
             <div class="actions">
-              <button id="twitch-connect" class="secondary small" disabled>Connect Twitch</button
-              ><button id="twitch-disconnect" class="quiet small" disabled>Disconnect</button>
+              <button class="primary" type="submit">Save</button
+              ><button type="button" data-discard="generation">Discard changes</button
+              ><button id="generation-check" type="button" data-check="generation" hidden>
+                Check connection</button
+              ><a href="/testing?mode=response" target="_blank" rel="noopener">Test response</a>
             </div>
-            <p id="twitch-rejection" class="error" role="status"></p>
-          </details>
-        </aside>
-      </div>
-      <footer>
-        <span>Keep this page open for audio. Reopen and Resume after closing or refreshing.</span
-        ><button id="quit" class="quiet small" disabled>Quit app</button>
-      </footer>
-    </main>
+            <p data-feedback="generation" class="hint" role="status"></p>
+            <p data-check-result="generation" class="hint" role="status"></p>
+          </form>
+          <form class="setting-section" id="speech" data-section="speech">
+            <div class="section-heading">
+              <h2>Speech</h2>
+              <span id="speech-status" class="subtle"></span>
+            </div>
+            <p class="hint">Fish Audio. Speech remains independent of generation.</p>
+            <label class="field" for="speech-key"
+              ><span>API key / replacement</span
+              ><input
+                id="speech-key"
+                name="key"
+                type="password"
+                autocomplete="off"
+                placeholder="Leave blank to keep the stored key"
+            /></label>
+            <div class="actions">
+              <button class="primary" type="submit">Save</button
+              ><button type="button" data-discard="speech">Discard changes</button
+              ><button type="button" data-check="speech">Check connection</button>
+            </div>
+            <p data-feedback="speech" class="hint" role="status"></p>
+            <p data-check-result="speech" class="hint" role="status"></p>
+          </form>
+          <form class="setting-section" id="characters" data-section="characters">
+            <h2>Characters</h2>
+            <p class="hint">
+              Characters come from the catalog and prompt files. Each combines a prompt with its
+              assigned voice. Enter Name: question when testing.
+            </p>
+            <div id="voices"></div>
+            <div class="actions">
+              <button class="primary" type="submit">Save</button
+              ><button type="button" data-discard="characters">Discard changes</button
+              ><a href="/testing?mode=voice" target="_blank" rel="noopener">Test voice</a>
+            </div>
+            <p data-feedback="characters" class="hint" role="status"></p>
+          </form>
+          <form class="setting-section" id="playback-settings" data-section="playback">
+            <h2>Playback</h2>
+            <label class="field" for="default-volume"
+              ><span>Default volume on launch (%)</span
+              ><input id="default-volume" type="number" min="0" max="100" name="volume"
+            /></label>
+            <div class="actions">
+              <button class="primary" type="submit">Save</button
+              ><button type="button" data-discard="playback">Discard changes</button>
+            </div>
+            <p data-feedback="playback" class="hint" role="status"></p>
+          </form>
+          <section class="setting-section" id="application">
+            <h2>Application</h2>
+            <div class="actions">
+              <button type="button" data-action="setup">Open setup checklist</button
+              ><a href="/testing" target="_blank" rel="noopener">Open local testing</a
+              ><button type="button" data-action="refresh-profiles">Reload character files</button>
+            </div>
+            <p id="diagnostics" class="hint" role="status"></p>
+            <div class="actions">
+              <button id="restart" data-action="restart" type="button">Restart app</button
+              ><button id="quit" class="danger" type="button" data-action="quit">
+                Shut down app
+              </button>
+            </div>
+          </section>
+        </section>
+        <section data-view="setup" hidden>
+          <p class="hint">
+            Configure at your own pace. These items open the same Settings controls; saving does not
+            check connections or invoke providers.
+          </p>
+          <div id="checklist" class="feed"></div>
+          <div class="actions">
+            <button data-page="activity">Go to Activity</button
+            ><a href="/testing" target="_blank" rel="noopener">Open local testing</a>
+          </div>
+        </section>
+      </main>
+    </div>
   </body>
 </html>

@@ -6,6 +6,7 @@ export interface PlaybackClip {
   url: string;
 }
 export interface PlaybackState {
+  management?: ManagementState;
   status: PlaybackStatus;
   clip: PlaybackClip | null;
   playerConnected: boolean;
@@ -17,6 +18,27 @@ export interface PlaybackState {
   canQuit?: boolean;
   queue?: QueueState;
   twitch?: TwitchState;
+}
+
+export type SettingsSection = 'generation' | 'speech' | 'characters' | 'playback' | 'application';
+export interface ManagementState {
+  revision: number;
+  pending: boolean;
+  setupSeen: boolean;
+  demo: boolean;
+  generation: {
+    provider: '' | 'openrouter' | 'codex';
+    model: string;
+    maxTokens: number;
+    keyConfigured: boolean;
+    ready: boolean;
+  };
+  speech: { provider: 'fish'; keyConfigured: boolean; ready: boolean };
+  characters: { id: string; name: string; voiceConfigured: boolean }[];
+  volume: number;
+  localReady: boolean;
+  errors: Partial<Record<SettingsSection, string>>;
+  overrides: string[];
 }
 export interface PlayerState extends PlaybackState {
   primary: boolean;

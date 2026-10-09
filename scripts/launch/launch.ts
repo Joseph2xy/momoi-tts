@@ -4,16 +4,17 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomBytes } from 'node:crypto';
 import { ensureBrowserBuild } from '../build/browser.ts';
-import { configurationProof, readConfig } from '../../src/app/config.ts';
+import { SettingsStore } from '../../src/app/settings.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const args = process.argv.slice(2);
 async function launch() {
   if (args.some((arg) => !['--demo', '--no-open'].includes(arg)))
     throw new Error('Unknown launcher option.');
-  const config = readConfig(process.env, args);
+  const store = new SettingsStore({ demo: args.includes('--demo') });
+  const config = { port: store.port, demo: store.demo };
   const base = `http://127.0.0.1:${config.port}`;
-  const expectedMode = config.demo ? 'demo' : !config.fish ? 'disabled' : 'live';
+  const expectedMode = store.pipeline()?.mode ?? 'disabled';
   const nonce = randomBytes(32).toString('hex');
   async function running(): Promise<boolean> {
     let response: Response;
@@ -45,7 +46,7 @@ async function launch() {
       throw new Error(
         'Tyrone is already running in a different mode. Quit it before switching modes.',
       );
-    if (health.configurationProof !== configurationProof(config, nonce))
+    if (health.configurationProof !== store.proof(nonce))
       throw new Error(
         'Tyrone is already running with different settings. Quit it before changing provider, model, or private configuration.',
       );
@@ -53,22 +54,12 @@ async function launch() {
   }
   if (!(await running())) {
     await ensureBrowserBuild();
-    const child = spawn(
-      process.execPath,
-      [
-        '--env-file-if-exists=.local/generation.env',
-        '--env-file-if-exists=.local/fish.env',
-        '--env-file-if-exists=.local/twitch.env',
-        'src/app/main.ts',
-        ...args.filter((arg) => arg !== '--no-open'),
-      ],
-      {
-        cwd: root,
-        windowsHide: true,
-        detached: true,
-        stdio: 'ignore',
-      },
-    );
+    const child = spawn(process.execPath, ['src/app/main.ts', ...args], {
+      cwd: root,
+      windowsHide: true,
+      detached: true,
+      stdio: 'ignore',
+    });
     let exited = false;
     child.once('error', () => {
       exited = true;

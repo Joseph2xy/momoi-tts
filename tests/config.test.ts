@@ -27,6 +27,14 @@ assert.throws(() => readConfig({ TYRONE_PLAYBACK_PORT: '999999' }, []), /App por
 assert.throws(() => readConfig({ TYRONE_WAITING_EXPIRY_MS: '0' }, []), /duration/u);
 assert.deepEqual(readGenerationConfig({}), { provider: 'codex' });
 assert.deepEqual(
+  readGenerationConfig({
+    TYRONE_TEXT_PROVIDER: 'codex',
+    TYRONE_CODEX_BIN: 'private-cli-path',
+    TYRONE_CODEX_LAUNCHER: 'private-launcher-path',
+  }),
+  { provider: 'codex', codexBin: 'private-cli-path', codexLauncher: 'private-launcher-path' },
+);
+assert.deepEqual(
   readGenerationConfig({ TYRONE_TEXT_PROVIDER: 'codex', OPENROUTER_API_KEY: dummyKey }),
   { provider: 'codex' },
 );

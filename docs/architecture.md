@@ -1,56 +1,54 @@
 # Code structure
 
-One local Node/TypeScript application serves a streamer control page and a separate manual testing page. Generation and hosted speech remain independent adapters. No framework or hosted application service is required.
+One local Node/TypeScript application serves browser management and a separate testing page. Generation and hosted speech remain independent adapters. No framework or hosted application service is required.
 
 ## File ownership
 
 | Location | Responsibility |
 | --- | --- |
-| `src/app/` | Read configuration, compose providers/runtime, start and stop the application |
-| `src/characters/` | Character types, trusted catalog loading, viewer name selection |
-| `characters/` | Editable catalog and character-specific prompts |
-| `src/queue/` | Admission, cooldowns, deduplication, request lifecycle, cancellation, read-only history |
-| `src/playback/` | Audio-owner lease, current clip, progress, speech holds, playback acknowledgements |
-| `src/providers/` | Shared dialogue validation and OpenRouter, Codex, and Fish adapters |
-| `src/twitch/` | Redemption intake, Twurple transport, reward setup, private tokens/outcome journal |
-| `src/server/` | HTTP validation/routes, same-origin/loopback restrictions, audio and static-file delivery |
-| `src/shared/` | Browser/server state contracts and safe request-input errors |
-| `web/` | Main controls/rendering and audio playback; separate testing HTML/entrypoint; shared styles |
+| `src/app/` | Private settings, provider composition, runtime, fixed setup/restart actions |
+| `src/characters/`, `characters/` | Trusted catalog loading, viewer name selection, file-based prompts |
+| `src/queue/` | Admission, bounds, cooldowns, deduplication, lifecycle, cancellation, read-only history |
+| `src/playback/` | Audio-owner lease, current clip, holds, progress and acknowledgements |
+| `src/providers/` | Dialogue validation and independent OpenRouter, Codex and Fish adapters |
+| `src/twitch/` | Retained redemption transport, rewards, private tokens/outcome journal for later integration |
+| `src/server/` | HTTP validation, loopback/same-origin restrictions, audio/static delivery |
+| `src/shared/` | Safe browser/server contracts and input errors |
+| `web/` | Persistent management/playback and one testing page, with a shared stylesheet |
 | `config/examples/` | Public provider/Twitch templates |
-| `scripts/launch/` | Foreground/background Node launch entrypoints |
-| `scripts/windows/` | Windows launcher and setup UI wrappers |
-| `scripts/build/` | Browser build reuse and transfer packaging |
-| `scripts/twitch/`, `scripts/auditions/` | Explicit account/reward setup and later provider auditions |
-| `tests/` | Offline behavior and actual SDK checks using mocks |
-| `.local/` | Ignored private settings, account/recovery state, setup progress, launcher logs |
-| `.generated/` | Ignored disposable browser builds, release ZIPs, audition output, check reports |
+| `scripts/launch/`, `scripts/windows/` | Bounded start/reuse/restart helpers and prerequisite bootstrap |
+| `scripts/build/` | Browser build reuse and public transfer packaging |
+| `scripts/twitch/`, `scripts/auditions/` | Explicit later account/reward setup and provider auditions |
+| `tests/` | Offline behavior, synthetic providers and actual SDK/CLI checks with local mocks |
+| `.local/` | Ignored private configuration, account/recovery state and launcher logs |
+| `.generated/` | Ignored builds, packages, auditions and check output |
 
-## Application flow
+## Settings and startup
 
-`web/designs.html`, `designs.ts`, and `designs.css` form a temporary browser-management mockup served by Vite development mode. The selected sidebar layout uses dark mode and sample Activity, Connections, Settings, and guided setup controls; theme and detailed UI design are deferred. All state is in memory. They do not import app playback, fetch app APIs, access private settings, persist credentials, or enter production builds, build fingerprints, or transfer packages. Settings validation, connection/test actions, authorization/reward setup, and shutdown are illustrative. Keep it for ongoing workflow review; the production frontend remains the functional implementation. Remove the mockup once integration makes it redundant.
+`SettingsStore` reads `.local/generation.env`, `.local/fish.env` and `.local/app.json` (setup progress and launch-volume default), keeping inherited environment overrides distinct from saved values. Fixed section schemas validate before atomic writes and preserve unrelated env-file entries. Browser state exposes configured status, safe metadata and generic errors; saved API keys, voice IDs and prompts never return to the page. Blank replacements retain secrets. Save makes no provider calls.
 
-`src/app/main.ts` selects demo/live adapters and starts `createAppServer`. `src/app/runtime.ts` owns the playback session, its queue, Twitch intake, periodic expiry checks, and shutdown. `src/app/server.ts` connects that runtime to HTTP and disposes it on server close. The HTTP server consumes the runtime through a small structural interface; it constructs no queue, provider, or Twitch transport.
+`main.ts` starts management with missing provider configuration. New unconfigured management does not implicitly select a provider. Full local requests are gated on generation, speech and character configuration; independent tests have their own prerequisites. Essential failures, such as an invalid listening port, still prevent startup. Normal/demo startup deliberately does not load or connect Twitch in this milestone.
 
-Manual requests from `/testing` and Twitch requests enter the same queue using `Name: question`. Character selection resolves only trusted catalog names. Missing/unknown names and empty questions fail before provider dispatch. Viewer content cannot select files, voice IDs, or providers. Each accepted job snapshots its character profile; only its question reaches generation as untrusted conversational data. Public state contains character IDs/names, not prompts or voice settings.
+`runtime.ts` owns the playback session, queue, management operations and expiry. `app/server.ts` binds runtime to HTTP and disposes it when closed. The HTTP layer validates commands and delegates; it constructs no providers or queue. Routes accept fixed settings sections/actions, never arbitrary commands or paths. Account checks use read-only provider endpoints and redact responses; Codex has one local prerequisite check establishing only executable/version availability.
 
-The queue calls independent generate/synthesize operations through `QueuePipeline`, without importing provider implementations. `src/app/pipeline.ts` binds them to configured adapters. A slot remains occupied through acknowledged playback. Skip/stop/timeout invalidates late generation and speech results. History is bounded and read-only. Playback owns only the current audio buffer and releases it after completion, cancellation, failure, or timeout. There is no replay API, queue path, or audio cache. The functional frontend shows each question once and preserves response expansion through control updates.
+The testing page contains full-request, response-only and fixed-phrase voice tests and never owns audio. Settings links to the relevant mode; test dialogs were removed from management. Both pages share management.css. Browser management uses persistent page sections. Navigation does not dispose playback or drafts. Per-section saves/Discard, beforeunload warnings, pending settings and restart feedback are separate from explicit checks/tests. Application houses checklist, diagnostics, testing entrypoint, restart and shutdown. The old development mockup and launcher management wizard are removed; Windows setup remains the Node/dependency bootstrap mechanism.
 
-## Playback and generation boundaries
+## Request and playback boundaries
 
-The playback session owns one audio lease; `web/playback.ts` owns the browser audio element independently of controls rendering. Secondary control tabs stay silent. The testing page polls public state and submits questions without importing playback or acquiring/releasing an audio lease. Closing/refreshing the owner cancels active work and pauses the queue. Reopening requires explicit Resume. Pause holds current speech and the next request, including a clip prepared during generation. Intentional holds exclude paused time from watchdogs; disconnection still cancels work. Progress/events are accepted only from the current owner and clip.
+Testing requests enter the bounded queue as `Name: question`. Selection resolves trusted catalog names; missing/unknown names fail before provider dispatch. Viewer input cannot choose files, providers, voice IDs or executables. Accepted work retains its character identity/prompt. At processing start, the queue pins one pipeline for both generation and speech and resolves the selected character's current assigned voice. Active work keeps its original pipeline; pending work uses the replacement before starting. Fixed voice-test pipelines are constructed by trusted runtime code only.
 
-OpenRouter sends one non-streaming request with separate character/viewer messages and one exact model. It attaches no tools/plugins/executor, disables fallback, and currently caps prices at zero. Output validation rejects tool calls and malformed, empty, incomplete, oversized, or overlength dialogue. Only final content reaches speech. Abort/deadline handling covers fetch and body consumption; no retry occurs. Codex has executors disabled and a guarded tested CLI version. Prompt instructions alone are not the tool boundary.
+The queue imports no provider implementation. `pipeline.ts` binds generate/synthesize adapters. Slots remain occupied through acknowledged playback. Skip/stop/deadline invalidates late results. History is bounded and read-only; only current audio is retained, with no replay API/cache.
 
-## Twitch recovery
+One audio-owner lease governs playback. `web/playback.ts` owns the audio element independently of page rendering; secondary tabs remain silent. `/testing` submits and polls without playback ownership. Closing/refreshing the owner cancels active work and pauses. Reopening requires Resume. Intentional holds exclude paused time from watchdogs; owner/clip identity gates progress and completion.
 
-Twurple transport verifies broadcaster authorization and listens for redemption add/update events. Connect finds an app-managed required-text reward; only explicit reward setup creates it. Intake persists a cancellation outcome before admission, marks completed playback fulfilled, and cancels/refunds other terminal work. Native moderation and disconnect/reconnect races cancel matching requests.
+OpenRouter uses one exact model with separate trusted/viewer messages, no tools/plugins/executor, no fallback and temporary zero-price caps. Output validation rejects tool calls, malformed, empty, incomplete or overlength dialogue. Codex uses guarded CLI 0.162.0 with executors disabled; prompt instructions alone are not the boundary. Private CLI path overrides remain supported. Generation and hosted speech are independently replaceable.
 
-The private bounded outcome journal contains identifiers/targets, never viewer text/audio. It retries confirmation while connected and reconciles outstanding old redemptions on restart, without replaying them. Native final outcomes are preserved after ambiguous failures. Malformed/mismatched journals fail closed for review. A crash between playback completion and durable recording can refund a just-played reply.
+## Launch and retained Twitch boundaries
 
-## Operational paths
+Launcher reuse uses a fresh HMAC challenge over effective configuration without exposing settings or stable credential hashes. Browser saves update the proof. Mismatches require explicit shutdown/relaunch; no existing work is silently stopped. Explicit restart cancels/clears work, waits a bounded time for the old port to close, then starts through the normal launcher and returns paused. The server port is a developer environment setting read before launch; saved playback volume is a launch default.
 
-Private paths remain stable; no credential/recovery migration is needed. The launcher uses a fresh HMAC challenge over effective settings, including loaded profiles/prompts/voices, without exposing settings or stable credential hashes. Mismatches require explicit quit/relaunch. Browser builds are reused by source/config fingerprint. HTTP exposes only the built control/testing pages and hashed assets, never enclosing generated/private directories.
+Windows bootstrap offers Node/dependency actions when startup is blocked. Codex installation/sign-in are prepared externally; the app only checks the local guarded version. Installer routes, callbacks and background action state were removed. No browser-supplied shell text is executed. Build reuse fingerprints production inputs. Packaging uses a public-file allowlist and rejects links, excluding private state, dependencies and generated output.
 
-Windows setup runs fixed local actions outside the browser. Navigation remembers a page, not verified completion. Packaging uses a public-file allowlist and rejects linked files/directories; it excludes both private state and generated output.
+Retained Twurple transport/intake remains covered by mocks but is disconnected from the current entrypoint. Explicit reward setup owns creation. Intake bounds/deduplicates work, handles moderator outcomes, and settles completion/refunds using a private durable journal without replaying old requests. Remembered connection choice, live-only intake and stream-end policy remain later integration work. A crash between completed playback and durable settlement can refund a just-played response.
 
-[Commands/configuration](../README.md) · [Test evidence](verification.md) · [Current decisions](../PROJECT_HANDOFF.md)
+[Commands](../README.md) · [Evidence](verification.md) · [Decisions](../PROJECT_HANDOFF.md)

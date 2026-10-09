@@ -12,7 +12,6 @@ async function browserFingerprint(): Promise<string> {
   async function visit(relative: string) {
     const entries = await readdir(new URL(relative, root), { withFileTypes: true });
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (relative === 'web/' && /^designs\.(?:html|ts|css)$/u.test(entry.name)) continue;
       const name = `${relative}${entry.name}`;
       if (entry.isDirectory()) await visit(`${name}/`);
       else {

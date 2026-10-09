@@ -3,7 +3,8 @@ import { generateDialogue as openRouterDialogue } from '../providers/openrouter/
 import { validateOpenRouterConfig, type OpenRouterConfig } from '../providers/openrouter/config.ts';
 import type { DialogueInput } from '../providers/dialogue.ts';
 
-export type GenerationConfig = { provider: 'codex' } | OpenRouterConfig;
+export type GenerationConfig =
+  { provider: 'codex'; codexBin?: string; codexLauncher?: string } | OpenRouterConfig;
 
 export function readGenerationConfig(env: NodeJS.ProcessEnv): GenerationConfig {
   const provider = env.TYRONE_TEXT_PROVIDER;
@@ -11,7 +12,11 @@ export function readGenerationConfig(env: NodeJS.ProcessEnv): GenerationConfig {
     provider === 'codex' ||
     (!provider && !env.OPENROUTER_API_KEY && !env.OPENROUTER_MODEL && !env.OPENROUTER_MAX_TOKENS)
   )
-    return { provider: 'codex' }; // Preserve the existing Codex launch path.
+    return {
+      provider: 'codex',
+      ...(env.TYRONE_CODEX_BIN ? { codexBin: env.TYRONE_CODEX_BIN } : {}),
+      ...(env.TYRONE_CODEX_LAUNCHER ? { codexLauncher: env.TYRONE_CODEX_LAUNCHER } : {}),
+    };
   if (provider !== 'openrouter')
     throw new Error(
       'Set TYRONE_TEXT_PROVIDER to codex or openrouter in private generation configuration.',
@@ -29,5 +34,9 @@ export function readGenerationConfig(env: NodeJS.ProcessEnv): GenerationConfig {
 export function generateConfiguredDialogue(config: GenerationConfig, input: DialogueInput) {
   return config.provider === 'openrouter'
     ? openRouterDialogue(config, input)
-    : codexDialogue(input);
+    : codexDialogue(input, {
+        ...process.env,
+        ...(config.codexBin ? { TYRONE_CODEX_BIN: config.codexBin } : {}),
+        ...(config.codexLauncher ? { TYRONE_CODEX_LAUNCHER: config.codexLauncher } : {}),
+      });
 }

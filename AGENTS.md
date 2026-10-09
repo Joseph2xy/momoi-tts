@@ -13,6 +13,8 @@ Read `PROJECT_HANDOFF.md` before making project decisions. Use `README.md` for c
 - Work on the component the user requests; do not treat the handoff as authorization to build everything.
 - Prioritize the desired result over provisional implementation choices. Change routes when evidence supports a better fit.
 - Look for suitable existing tools before implementing a component. Keep explanations and integration tests proportionate to this small app.
+- Use established concepts, interaction patterns, and workflows as a starting point; take inspiration from similar apps rather than rethinking familiar problems from scratch. This is not a preference for libraries or existing software; use those when they fit. Do not infer additional workflow decisions or authorization from this principle.
+- For routine live-operation workflows, use TTS donation/subscription-alert tools as the main reference, checking documented behavior where needed. This does not authorize adding those event types or adopting every reference-app behavior.
 - Distinguish requirements, provisional choices, documented capabilities, and hands-on results.
 - Update the handoff when material decisions or status change; avoid duplicating implementation history across documents.
 

@@ -4,11 +4,11 @@ import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 
 // Reuse the installed official CLI; avoid shell commands containing viewer text.
-export function findCodex(): string {
-  if (process.env.TYRONE_CODEX_BIN) return process.env.TYRONE_CODEX_BIN;
-  let launcher = process.env.TYRONE_CODEX_LAUNCHER;
+export function findCodex(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.TYRONE_CODEX_BIN) return env.TYRONE_CODEX_BIN;
+  let launcher = env.TYRONE_CODEX_LAUNCHER;
   if (!launcher) {
-    for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
+    for (const dir of (env.PATH ?? '').split(path.delimiter)) {
       const shim = path.join(dir, 'codex.ps1');
       if (!existsSync(shim)) continue;
       const match = readFileSync(shim, 'utf8').match(

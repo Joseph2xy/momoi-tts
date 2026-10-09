@@ -116,6 +116,34 @@ try {
   });
   assert(reused.stdout.includes('Tyrone ready'));
   assert.equal((await stat(browserIndex)).mtimeMs, beforeReuse);
+  // Exercise the real bounded restart helper without opening a browser or sending requests.
+  await fetch(`${base}/api/settings`, {
+    method: 'POST',
+    headers: { Origin: base, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ muted: true, volume: 0.25 }),
+  });
+  const restart = await fetch(`${base}/api/app/restart`, {
+    method: 'POST',
+    headers: { Origin: base, 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  assert.equal(restart.status, 200);
+  let restarted = false;
+  for (let attempt = 0; attempt < 80; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    try {
+      const next = await (
+        await fetch(`${base}/api/state`, { signal: AbortSignal.timeout(500) })
+      ).json();
+      if (next.queue.paused && next.queue.requests.length === 0 && next.management && !next.muted) {
+        restarted = true;
+        break;
+      }
+    } catch {
+      /* Server closes before the launcher starts its replacement. */
+    }
+  }
+  assert(restarted, 'Restart must reopen a paused local server within the bounded handoff.');
 } finally {
   await fetch(`${base}/api/app/quit`, {
     method: 'POST',

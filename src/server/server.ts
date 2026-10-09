@@ -6,6 +6,7 @@ import type { TwitchIntake } from '../twitch/intake.ts';
 import { routeCommand } from './routes.ts';
 import { sendAudio } from './audio.ts';
 import { sendFrontend } from './frontend.ts';
+import type { SettingsSection } from '../shared/protocol.ts';
 
 interface HttpRuntime {
   session: PlaybackSession;
@@ -14,6 +15,13 @@ interface HttpRuntime {
   snapshot(): PlaybackState;
   configurationProof(nonce: string): string | undefined;
   quit(): void;
+  saveSettings(section: SettingsSection, body: Record<string, unknown>): unknown;
+  restart(confirmed: boolean): void;
+  prerequisites(): Promise<unknown>;
+  testResponse(question: unknown, signal: AbortSignal): Promise<unknown>;
+  testVoice(body: Record<string, unknown>): unknown;
+  checkConnection(section: unknown): Promise<unknown>;
+  refreshProfiles(): unknown;
 }
 
 export function createHttpServer(runtime: HttpRuntime) {
@@ -118,6 +126,53 @@ export function createHttpServer(runtime: HttpRuntime) {
         json(200, snapshot());
         return;
       }
+      if (url.pathname === '/api/app/restart') {
+        runtime.restart(body.confirmed === true);
+        json(200, { ok: true });
+        return;
+      }
+      if (url.pathname === '/api/app/prerequisites') {
+        json(200, await runtime.prerequisites());
+        return;
+      }
+      if (url.pathname === '/api/test/response') {
+        const cancel = new AbortController();
+        const abort = () => cancel.abort();
+        response.once('close', abort);
+        try {
+          json(
+            200,
+            await runtime.testResponse(
+              body.question,
+              AbortSignal.any([cancel.signal, AbortSignal.timeout(45_000)]),
+            ),
+          );
+        } finally {
+          response.removeListener('close', abort);
+        }
+        return;
+      }
+      if (url.pathname === '/api/test/voice') {
+        json(200, runtime.testVoice(body));
+        return;
+      }
+      if (url.pathname === '/api/check/connection') {
+        json(200, await runtime.checkConnection(body.section));
+        return;
+      }
+      if (url.pathname === '/api/app/refresh-profiles') {
+        json(200, runtime.refreshProfiles());
+        return;
+      }
+      if (url.pathname.startsWith('/api/config/')) {
+        const section = url.pathname.slice('/api/config/'.length);
+        if (!['generation', 'speech', 'characters', 'playback', 'application'].includes(section)) {
+          json(404, { error: 'Not found.' });
+          return;
+        }
+        json(200, runtime.saveSettings(section as SettingsSection, body));
+        return;
+      }
       if (url.pathname === '/api/twitch/disconnect') {
         twitch.disconnect();
         json(200, snapshot());
@@ -126,7 +181,7 @@ export function createHttpServer(runtime: HttpRuntime) {
       const result = await routeCommand(url.pathname, body, session);
       const value =
         result.body && typeof result.body === 'object' && 'queue' in result.body
-          ? { ...result.body, twitch: twitch.snapshot(), canQuit: runtime.canQuit }
+          ? { ...runtime.snapshot(), ...result.body }
           : result.body;
       json(result.status, value);
     } catch (error) {

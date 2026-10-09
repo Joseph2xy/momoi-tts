@@ -37,16 +37,13 @@ export interface CodexEvent {
 }
 
 // Codex-specific result metadata; the app pipeline consumes only dialogue.
-export async function generateDialogue({
-  character,
-  question,
-  maxWords = 60,
-  timeoutMs = 45_000,
-  signal,
-}: DialogueInput): Promise<DialogueResult> {
+export async function generateDialogue(
+  { character, question, maxWords = 60, timeoutMs = 45_000, signal }: DialogueInput,
+  runtimeEnv: NodeJS.ProcessEnv = process.env,
+): Promise<DialogueResult> {
   validateDialogueInput({ character, question, maxWords, timeoutMs });
   if (signal?.aborted) throw new Error('Generation cancelled.');
-  const executable = findCodex();
+  const executable = findCodex(runtimeEnv);
   const env = subscriptionEnv();
   const checks = {
     env,
