@@ -11,9 +11,7 @@
     <div class="app-shell">
       <header class="app-navigation">
         <nav class="navigation" aria-label="Main navigation">
-          <button data-page="activity">Activity</button
-          ><button data-page="connections">Connections</button
-          ><button data-page="settings">Settings</button>
+          <button data-page="activity">Back to Activity</button>
         </nav>
         <span id="connection" class="subtle">Connecting</span>
       </header>
@@ -24,16 +22,8 @@
         <p id="message" class="error" role="alert"></p>
         <p id="playback-note" class="hint" role="status"></p>
         <button id="enable" hidden>Enable audio</button>
-        <p id="readiness" class="hint"></p>
         <section id="activity-page" data-view="activity">
           <div id="activity-root"></div>
-        </section>
-        <section data-view="connections" hidden>
-          <h2>Twitch</h2>
-          <p class="hint">
-            Twitch connection and Channel Points setup will follow local configuration and playback
-            integration. Local testing works independently.
-          </p>
         </section>
         <section data-view="settings" hidden>
           <p class="settings-note">
@@ -153,6 +143,11 @@
           <section class="setting-section" id="application">
             <h2>Application</h2>
             <p id="mode" class="hint"></p>
+            <p id="readiness" class="hint"></p>
+            <p class="hint">
+              Twitch connection and Channel Points setup are deferred. Local testing works
+              independently.
+            </p>
             <div class="actions">
               <button type="button" data-action="setup">Open setup checklist</button
               ><a href="/testing" target="_blank" rel="noopener">Open local testing</a
@@ -172,7 +167,7 @@
             Configure at your own pace. These items open the same Settings controls; saving does not
             check connections or invoke providers.
           </p>
-          <div id="checklist" class="feed"></div>
+          <div id="checklist"></div>
           <div class="actions">
             <button data-page="activity">Go to Activity</button
             ><a href="/testing" target="_blank" rel="noopener">Open local testing</a>

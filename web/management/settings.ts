@@ -166,11 +166,10 @@ export function createSettings(
           'characters',
         ],
         ['Playback preferences', true, 'playback-settings'],
-        ['Twitch and reward — later phase', false, 'connections'],
       ]
         .map(
           ([label, ready, target]) =>
-            `<button class="checklist-item" data-target="${target}">${label}<span>${ready ? 'Configured locally' : target === 'connections' ? 'Deferred' : 'Needs configuration'}</span></button>`,
+            `<button class="checklist-item" data-target="${target}">${label}<span>${ready ? 'Configured locally' : 'Needs configuration'}</span></button>`,
         )
         .join('');
     },

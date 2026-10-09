@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 import {
   AudioLines,
-  History,
-  ListOrdered,
+  ChevronRight,
+  Ellipsis,
   Pause,
   Play,
   Settings,
@@ -15,6 +15,23 @@ import {
 import type { PlaybackState, RequestEntry, RequestStatus } from '../../src/shared/protocol.ts';
 import { Button } from './components/ui/button';
 import { Badge } from './components/ui/badge';
+import { cn } from './lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from './components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+} from './components/ui/dropdown-menu';
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from './components/ui/empty';
+import { Alert, AlertDescription } from './components/ui/alert';
 
 const statusLabels: Record<RequestStatus, string> = {
   waiting: 'Waiting',
@@ -43,13 +60,19 @@ function Status({ entry, paused, kind }: { entry: RequestEntry; paused: boolean;
   return (
     <Badge
       variant={
-        kind === 'current' ? 'speaking' : entry.status === 'completed' ? 'complete' : 'quiet'
+        entry.status === 'failed' || entry.status === 'blocked'
+          ? 'error'
+          : kind === 'current'
+            ? 'speaking'
+            : 'quiet'
       }
     >
       {kind === 'current' && entry.status === 'playing' && !paused ? (
         <AudioLines aria-hidden="true" />
       ) : null}
-      {kind === 'current' && paused ? 'Paused' : statusLabels[entry.status]}
+      {kind === 'current' && paused && ['ready', 'playing'].includes(entry.status)
+        ? 'Held'
+        : statusLabels[entry.status]}
     </Badge>
   );
 }
@@ -58,36 +81,40 @@ function Entry({
   entry,
   kind,
   remove,
-  disabled,
+  disabled = false,
+  inspect,
+  paused,
 }: {
   entry: RequestEntry;
   kind: Kind;
-  remove: () => void;
-  disabled: boolean;
+  remove?: () => void;
+  disabled?: boolean;
+  inspect: () => void;
+  paused: boolean;
 }) {
   return (
     <article
-      className={'feed-entry ' + kind + '-entry'}
+      className={cn('feed-entry', kind + '-entry')}
       aria-label={entry.viewer + ': ' + statusLabels[entry.status]}
     >
-      <div className="entry-meta">
-        <span className="viewer">{entry.viewer}</span>
-        <span className="destination">to {entry.characterName}</span>
-        <time dateTime={new Date(entry.createdAt).toISOString()}>
-          {clock.format(entry.createdAt)}
-        </time>
-        {kind === 'past' ? <Status entry={entry} paused={false} kind={kind} /> : null}
-      </div>
-      <p className="question" title={kind !== 'past' ? entry.question : undefined}>
-        {entry.question}
-      </p>
-      {kind !== 'waiting' && entry.dialogue ? (
-        <div className="response">
-          <span className="speaker">{entry.characterName}’s reply</span>
-          <p className="spoken-response">{entry.dialogue}</p>
+      <button
+        type="button"
+        className="entry-inspect"
+        onClick={inspect}
+        aria-label={'View message from ' + entry.viewer}
+      >
+        <div className="entry-meta">
+          <span className="viewer">{entry.viewer}</span>
+          <span className="destination">to {entry.characterName}</span>
+          <time dateTime={new Date(entry.createdAt).toISOString()}>
+            {clock.format(entry.createdAt)}
+          </time>
+          <Status entry={entry} paused={paused} kind={kind} />
         </div>
-      ) : null}
-      {entry.error ? <p className="request-error">{entry.error}</p> : null}
+        <p className="question">{entry.question}</p>
+        {entry.error ? <p className="request-error">{entry.error}</p> : null}
+        <ChevronRight className="inspect-chevron" aria-hidden="true" />
+      </button>
       {kind === 'waiting' ? (
         <Button
           variant="ghost"
@@ -127,8 +154,25 @@ function Controls({ state, connected, pending, command, openSettings }: Props) {
   return (
     <header className="controls">
       <div className="title-row">
-        <h1>Messages</h1>
-        <Button variant="ghost" size="icon" onClick={openSettings} aria-label="Open settings">
+        <h1>Activity</h1>
+        <span className="operating-state" role="status">
+          {!state
+            ? 'Connecting…'
+            : !connected
+              ? 'Server offline'
+              : state.queue?.paused
+                ? 'Paused'
+                : 'Running'}
+        </span>
+        {state?.queue?.mode === 'demo' ? <Badge variant="quiet">Demo</Badge> : null}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="settings-entrypoint"
+          onClick={openSettings}
+          aria-label="Open settings"
+          title="Settings"
+        >
           <Settings data-icon="inline-start" />
         </Button>
       </div>
@@ -156,17 +200,6 @@ function Controls({ state, connected, pending, command, openSettings }: Props) {
             <Pause data-icon="inline-start" />
           )}
           {state?.queue?.paused !== false ? 'Resume' : 'Pause'}
-        </Button>
-        <Button
-          id="stop-clear"
-          variant="ghost"
-          size="icon"
-          disabled={disabled || (!current && !state?.queue?.waitingIds.length)}
-          onClick={() => run('/api/queue/stop')}
-          aria-label="Stop and clear"
-          title="Stop and clear current and waiting messages"
-        >
-          <Square data-icon="inline-start" />
         </Button>
         <div className="volume">
           <Button
@@ -219,12 +252,40 @@ function Controls({ state, connected, pending, command, openSettings }: Props) {
             {state?.muted ? 'Muted' : (draftVolume ?? Math.round((state?.volume ?? 1) * 100)) + '%'}
           </span>
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="More playback controls">
+              <Ellipsis data-icon="inline-start" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                id="clear"
+                disabled={disabled || !state?.queue?.waitingIds.length}
+                onSelect={() => run('/api/queue/clear')}
+              >
+                Clear waiting
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                id="stop-clear"
+                disabled={disabled || (!current && !state?.queue?.waitingIds.length)}
+                onSelect={() => run('/api/queue/stop')}
+              >
+                <Square />
+                Stop and clear
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
 }
 
 export function Activity(props: Props) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const inspectionTrigger = useRef<HTMLButtonElement | null>(null);
   const { state, pending, connected, command } = props;
   const queue = state?.queue;
   const current = queue?.requests.find((entry) => entry.id === queue.activeId);
@@ -235,36 +296,38 @@ export function Activity(props: Props) {
       .filter((entry) => entry.id !== queue.activeId && !queue.waitingIds.includes(entry.id))
       .sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)) ?? [];
   const disabled = pending || !connected;
+  const selected = queue?.requests.find((entry) => entry.id === selectedId);
+  function inspect(id: string) {
+    inspectionTrigger.current =
+      document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+    setSelectedId(id);
+  }
   const run = (route: string, body = {}) => void command(route, body).catch(() => {});
   return (
     <div className="utility">
       <Controls {...props} />
-      <section className="now-playing" aria-labelledby="current-heading">
+      <section className="current-work" aria-labelledby="current-heading">
         <div className="section-header">
-          <h2 id="current-heading">
-            {current?.status === 'playing' ? 'Now playing' : 'Current message'}
-          </h2>
-          {current ? <Status entry={current} paused={!!queue?.paused} kind="current" /> : null}
+          <h2 id="current-heading">Current</h2>
         </div>
         {current ? (
-          <Entry entry={current} kind="current" disabled={disabled} remove={() => {}} />
+          <Entry
+            key={current.id}
+            entry={current}
+            kind="current"
+            inspect={() => inspect(current.id)}
+            paused={!!queue?.paused}
+          />
         ) : (
-          <div className="queue-empty">
-            <p>
-              {!state
-                ? 'Connecting…'
-                : !connected
-                  ? 'Server offline'
-                  : queue?.paused
-                    ? 'Playback paused'
-                    : 'All caught up'}
-            </p>
-            <span>
-              {queue?.paused
-                ? 'Resume when you’re ready for new messages.'
-                : 'New questions will appear here.'}
-            </span>
-          </div>
+          <p className="waiting-empty">
+            {!state
+              ? 'Connecting…'
+              : !connected
+                ? 'Server offline'
+                : queue?.paused
+                  ? 'No current message. Resume to start playback.'
+                  : 'Waiting for questions.'}
+          </p>
         )}
         {current && state?.progress ? (
           <div className="speech-progress">
@@ -283,18 +346,9 @@ export function Activity(props: Props) {
       <section className="upcoming" aria-labelledby="upcoming-heading">
         <div className="section-header">
           <h2 id="upcoming-heading">
-            <ListOrdered aria-hidden="true" />
             Up next
+            {waiting.length ? <span className="waiting-count">{waiting.length}</span> : null}
           </h2>
-          <Button
-            id="clear"
-            variant="ghost"
-            size="xs"
-            disabled={disabled || !waiting.length}
-            onClick={() => run('/api/queue/clear')}
-          >
-            Clear waiting
-          </Button>
         </div>
         {waiting.length ? (
           waiting.map((entry) => (
@@ -304,6 +358,8 @@ export function Activity(props: Props) {
               kind="waiting"
               disabled={disabled}
               remove={() => run('/api/requests/remove', { id: entry.id })}
+              inspect={() => inspect(entry.id)}
+              paused={false}
             />
           ))
         ) : (
@@ -312,21 +368,82 @@ export function Activity(props: Props) {
       </section>
       <section className="history" aria-labelledby="history-heading">
         <div className="section-header history-header">
-          <h2 id="history-heading">
-            <History aria-hidden="true" />
-            History
-          </h2>
+          <h2 id="history-heading">History</h2>
         </div>
         <div className="history-list" tabIndex={0} role="region" aria-label="Message history">
           {history.length ? (
             history.map((entry) => (
-              <Entry key={entry.id} entry={entry} kind="past" disabled={true} remove={() => {}} />
+              <Entry
+                key={entry.id}
+                entry={entry}
+                kind="past"
+                inspect={() => inspect(entry.id)}
+                paused={false}
+              />
             ))
           ) : (
-            <p className="waiting-empty">Finished questions will appear here.</p>
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>No recent activity</EmptyTitle>
+                <EmptyDescription>Finished messages will appear here.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
         </div>
       </section>
+      <Dialog
+        open={!!selected}
+        onOpenChange={(open) => {
+          if (!open) setSelectedId(null);
+        }}
+      >
+        <DialogContent
+          className="message-detail"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            const trigger = inspectionTrigger.current;
+            if (trigger?.isConnected) trigger.focus();
+            else document.getElementById('pause')?.focus();
+          }}
+        >
+          {selected ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Message from {selected.viewer}</DialogTitle>
+                <DialogDescription>
+                  To {selected.characterName} at {clock.format(selected.createdAt)}
+                </DialogDescription>
+              </DialogHeader>
+              <Status
+                entry={selected}
+                paused={!!queue?.paused}
+                kind={
+                  selected.id === queue?.activeId
+                    ? 'current'
+                    : queue?.waitingIds.includes(selected.id)
+                      ? 'waiting'
+                      : 'past'
+                }
+              />
+              <div className="detail-transcript">
+                <section>
+                  <h2>Question</h2>
+                  <p>{selected.question}</p>
+                </section>
+                <section>
+                  <h2>{selected.characterName}’s reply</h2>
+                  <p>{selected.dialogue ?? 'No reply yet.'}</p>
+                </section>
+                {selected.error ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>{selected.error}</AlertDescription>
+                  </Alert>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 A local Windows companion that turns a named character's question into dialogue and assigned-voice playback. Browser management is integrated; Twitch connection and OBS setup are deferred. Tyrone is the first file-based character. App naming and final model/voice refinement remain deferred.
 
-On `prototype/ux-directions`, `npm run prototype:ux` opens the development server for [three interactive UX proposals](http://127.0.0.1:3224/prototype.html?variant=A). Use the bottom arrows to compare, and the example selector to try busy, paused, empty, or failed states. Preparation and Soundcheck are simulated. [Design notes](web/management/prototype/DESIGN.md) explain the alternatives; no direction is selected or integrated yet.
+The [product and UX brief](docs/product-ux.md) defines the occasional-use control screen and accepted starter design. The behavior described below is the current implementation.
 
 ## Run locally
 
@@ -21,7 +21,7 @@ For transfer, `npm run package` writes a public-source ZIP under `.generated/rel
 
 ## Browser management and private configuration
 
-First opening shows a reopenable setup checklist. Activity remains accessible with incomplete setup; normal full requests require generation, speech and voices. No provider is silently chosen for new management installations. Connections identifies Twitch as a later phase. Settings has Generation, Speech, Character voices, Playback and Application sections.
+First opening shows a reopenable setup checklist. Activity remains accessible with incomplete setup; normal full requests require generation, speech and voices. No provider is silently chosen for new management installations. Open Settings using the gear beside Activity; use Back to Activity to return. Settings has Generation, Speech, Character voices, Playback and Application sections. Application explains the deferred Twitch integration and links to the checklist and optional local testing.
 
 Generation, Speech, Character voices, and Playback have Save/Discard; Application contains actions and diagnostics. Drafts survive navigation within the tab and remain in page memory. Save validates and writes local files without contacting providers. Blank secret replacements retain existing values; saved keys/voice IDs are never returned to the page. Active requests finish on their original settings; waiting requests use changes before starting, retaining character selection. Default volume applies on the next launch. Restart warns before clearing queued work and returns paused.
 
@@ -46,7 +46,9 @@ Speech currently uses Fish `s2.1-pro-free`. Verify access, allowance and commerc
 
 `characters/catalog.json` contains trusted profiles and `characters/prompts/` their instructions. Each entry has a unique `id`, display `name` (up to 40 characters, no colon), relative `promptFile`, and `voiceIdEnv` naming a private 32-character Fish voice setting. Add profiles/prompts in files, click **Refresh file-based profiles** in Application, then assign their voices. No browser character Add/Edit interface is required initially. Demo ignores voice credentials.
 
-Input is `Name: question`; names are case-insensitive, with no default character. Questions after the first colon may contain colons and are bounded to 1,000 characters. Browser state exposes IDs/names, never prompts or voice IDs. Activity emphasizes questions, with replies secondary. Current and upcoming previews stay stationary; only history scrolls, showing complete questions/replies with the latest outcomes first. Short windows compact previews to retain space for history. History is read-only, with no replay.
+Input is `Name: question`; names are case-insensitive, with no default character. Questions after the first colon may contain colons and are bounded to 1,000 characters. Browser state exposes IDs/names, never prompts or voice IDs. Activity uses compact rows showing viewer, character, question preview and state. Current and Up next stay stationary; only History scrolls, with the latest outcomes first. Select a row to inspect the complete question and reply in a read-only dialog; Escape or Close returns to the list. History has no replay or queue actions.
+
+Skip and Pause/Resume sit in the toolbar with mute and a small volume control. **More playback controls** contains Clear waiting and Stop and clear. Waiting rows have a secondary Remove action. Settings navigation retains audio ownership and unsaved drafts.
 
 | Control | Behavior |
 | --- | --- |
@@ -69,7 +71,7 @@ The retained intake uses one shared `Name: question` reward, completion fulfillm
 The production Activity screen uses React, Tailwind and editable shadcn components.
 TanStack Query polls public server state; commands are serialized and never retried
 automatically. Settings retains its persistent forms and draft handling. Both browser
-pages use the charcoal/coral theme and locally bundled Outfit font. Use `npm run demo`
+pages use the charcoal/peach theme and locally bundled Outfit font. Use `npm run demo`
 for synthetic generation/audio without provider or Twitch calls.
 
 ```powershell

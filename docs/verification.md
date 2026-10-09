@@ -4,7 +4,7 @@ Evidence recorded through 2026-10-09. Recorded results do not mean every check r
 
 ## Offline coverage
 
-The message-screen integration on 2026-10-09 passed the production build, strict server/browser TypeScript, formatting, whitespace, twelve service-independent test files and the installed Codex probe using a fake loopback provider. Tests use synthetic dialogue/audio, dummy credentials, and mocks without live allowance.
+The local application checks on 2026-10-09 passed the production build, strict server/browser TypeScript, formatting, whitespace, twelve service-independent test files and the installed Codex probe using a fake loopback provider. Tests use synthetic dialogue/audio, dummy credentials, and mocks without live allowance.
 
 | Area | Checked behavior |
 | --- | --- |
@@ -24,75 +24,28 @@ Account checks were compared with [OpenRouter's current-key API](https://openrou
 
 ## Browser evidence
 
-Isolated demo reviews with disposable configuration and synthetic providers verified:
+The Activity redesign on 2026-10-09 passed a fresh production build, strict server/browser TypeScript, twelve offline test files and formatting. No provider or CLI adapter changed; the guarded Codex probe evidence above is retained from its earlier run, not newly claimed for this pass.
 
-- First-use/reopenable checklist, access with incomplete setup, drafts across navigation, invalid-save feedback, Discard, durable saves, and secret replacement fields clearing.
-- Response-only completion/cancellation, voice-only/full requests, waiting removal, held playback, skip preserving pause, completion, shutdown, and secondary-tab silence. Testing owns no audio element.
-- Save-response races: newer edits remain unsaved drafts while older saves persist. Clean tabs receive profile-refresh revisions.
-- Restart persistence: saved default volume restored, history cleared, processing paused. Real launcher restart passed its offline test.
-- At 1280x800, no horizontal overflow and each question displayed once.
+T3 review used an isolated demo server, disposable settings, synthetic dialogue/audio and zero review-only cooldowns. Browser interaction and DOM inspection verified:
 
-Same-browser script-free copies of the current DOM/stylesheet had no horizontal overflow at 320, 390, 700, and 1024 CSS pixels for management, and at 320px for Testing. This is limited layout evidence. Actual resizing timed out; screenshot/semantic capture failed. Mobile interaction and screenshot-based visual review remain unverified. A confirmation-dialog account-check interaction timed out; mock coverage does not establish hands-on connected behavior.
+- Full question/reply inspection, live status updates in an open dialog, Escape dismissal and focus returning to the originating row or Pause/Resume when that row disappeared.
+- Waiting-message removal, Skip preserving pause, the labeled secondary controls menu, Stop and clear returning paused with no active/waiting work, and keyboard volume changes reaching server state.
+- Settings access and return, unsaved playback drafts surviving navigation, and Discard restoring the saved value.
+- Viewer HTML appearing as literal text in both rows and inspection, with no injected image. History exposes inspection only, without replay or queue commands.
 
-The organizational-pass review also loaded both built pages in the T3 collaborative browser against isolated demo settings. DOM inspection and interactions verified the first-use checklist, navigation, draft retention across views, Discard, saved playback defaults, and a synthetic response-only test. Testing had no audio element. Snapshot capture failed; this review adds no screenshot or responsive-layout evidence. The review server and disposable settings were removed afterward.
+Script-free copies of the built DOM/styles at 1280x800, 600x700, 390x844 and 320x568 kept controls and rows within the viewport. With one held current message, two waiting messages and long synthetic questions, only history was scrollable and retained positive height (about 92px at 320x568). These are limited layout checks, not mobile pointer interaction evidence. Direct preview resizing timed out. Saved preview screenshots were blurred and delayed relative to inspected DOM state; complete visual verification remains open.
 
-## Message-screen integration
-
-The accepted question-first screen is integrated into the production Vite build on
-branch feat/message-screen. Fresh checks on 2026-10-09 passed strict server/browser
-TypeScript, the twelve offline test files, and the installed Codex dialogue-only probe
-against a fake loopback provider. State-controller tests verify cancellation of stale
-GETs, serialized commands, no automatic POST retries, offline gating, departure
-aborts, and transport-error redaction. Frontend tests fetch bundled WOFF2 fonts and
-verify their MIME type as well as existing private-path exclusion.
-
-T3 review used an isolated demo server, disposable settings, synthetic dialogue/audio,
-and zero review-only cooldowns. DOM-dispatched interactions verified the setup
-checklist, persistent settings drafts across navigation, Discard, durable playback
-default saving, secret replacement clearing without public-state disclosure, paused
-waiting removal, skip preserving pause, mute, volume reaching server state, and
-stop-and-clear. Navigation retained the same held audio element. A secondary Activity
-tab owned no audio, and Testing remained silent. Viewer input containing HTML appeared
-as literal text with no injected element; history exposed no buttons.
-
-DOM scrolling moved history while page scroll stayed zero and current work stayed
-stationary. Script-free copies of the production DOM/styles at 1280x800, 600x700,
-390x844, and 320x568 had no page overflow and only one visible scrollable region:
-history. With one current and two waiting questions expanded to long synthetic text,
-history remained within the viewport with positive height. These are limited layout
-checks, not mobile pointer interaction evidence. Current/upcoming text uses bounded
-previews; history text is complete. Direct resizing remains unverified. Snapshot
-capture failed, so this revision has no fresh screenshot-based visual verification.
-
-## UX direction prototypes
-
-On 2026-10-09, `prototype/ux-directions` passed strict server/browser TypeScript,
-the production build, and formatting of its new UI files. Production Vite inputs
-still contain only management and Testing; the comparison uses a separate
-development entrypoint. This was a synthetic UX review, not backend integration.
-
-T3 browser interactions verified variant switching and URL updates, pause/skip
-preserving hold state, stop-and-clear confirmation with initial focus on Cancel,
-sample response completion, full-flow queue insertion, rejection when the two
-waiting places are full, and saving a playback draft without changing live volume.
-The preview creates no audio element and makes no app/provider API calls. History
-search returned only its matching question and exposed no action buttons.
-Preparation navigation and in-memory personality draft saving were checked with
-DOM-dispatched events; this does not verify backend character persistence.
-
-Live same-origin iframe instances of A/B/C rendered Activity, preparation, and
-Soundcheck at 1280x800, 1024x768, 390x844, and 320x568 without horizontal overflow.
-Desktop Activity fits the viewport; A scrolls recent history and C scrolls the
-activity ledger. Mobile pages use vertical page scrolling. These are actual
-iframe layout checks, not direct mobile pointer testing. T3 direct resize timed
-out and snapshot capture failed. Native preview recording succeeded; recorded
-frames were used for visual review. No successful standalone screenshots were
-captured. Earlier production evidence above does not establish that proposed
-browser character editing or the new workflows are implemented.
+Earlier isolated management reviews also verified the first-use/reopenable checklist, incomplete-setup access, invalid-save feedback, durable saves, blank secret retention, secret replacement clearing, save-response races, profile-refresh revisions, response/voice testing, secondary-tab silence, retained audio across navigation and restart persistence. Those checks were not all repeated during this layout pass. Offline tests continue to cover their backend contracts. Testing owns no audio element. A connected account-check dialog timed out; mock coverage does not establish hands-on connected behavior.
 
 ## Packaging evidence
 
 The transfer package passed a fresh integration check: production React TSX files, public-state Query integration, component configuration, and the current browser folders are included. Prototype paths, private state, dependencies and generated output are excluded. PowerShell packaging syntax passed, and the temporary verification ZIP was deleted. Fresh destination-PC installation and actual prerequisite installation/sign-in were not exercised.
+
+## Starter cleanup
+
+On 2026-10-09, the accepted starter passed a fresh production build, strict server/browser TypeScript, twelve offline test files, formatting and whitespace checks after removing unused UI variants, inactive animation classes, duplicate CSS rules and no-op row props. Existing browser evidence above is retained; no fresh browser interaction or screenshot verification is claimed for this cleanup.
+
+Packaging PowerShell syntax and the six public TSX component inputs were checked. No new transfer ZIP, provider request or CLI probe was produced. The isolated review process was stopped and port 3224 was confirmed to have no listener. Review-file deletion was rejected by automatic approval review; [handoff](../PROJECT_HANDOFF.md#temporary-state) owns the pending paths. Private configuration and account state were preserved.
 
 ## Connected evidence and limits
 

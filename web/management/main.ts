@@ -65,9 +65,7 @@ document.addEventListener('click', (event) => {
     return;
   }
   if (button.dataset.target) {
-    button.dataset.target === 'connections'
-      ? route('connections')
-      : route('settings', button.dataset.target);
+    route('settings', button.dataset.target);
     return;
   }
   if (button.dataset.discard && state?.management) {

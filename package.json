@@ -25,8 +25,7 @@
     "check:tools": "node tests/codex-tools.test.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.browser.json --noEmit",
     "format": "prettier --write src web tests \"scripts/**/*.ts\" vite.config.ts",
-    "format:check": "prettier --check src web tests \"scripts/**/*.ts\" vite.config.ts",
-    "prototype:ux": "vite --host 127.0.0.1 --port 3224 --strictPort"
+    "format:check": "prettier --check src web tests \"scripts/**/*.ts\" vite.config.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
