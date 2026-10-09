@@ -61,8 +61,6 @@ export interface RequestEntry {
   startedAt?: number;
   finishedAt?: number;
   error?: string;
-  replayOf?: string;
-  replayAvailable?: boolean;
 }
 export interface QueueState {
   characters: CharacterInfo[];

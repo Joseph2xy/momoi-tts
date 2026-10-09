@@ -51,23 +51,20 @@ assert.equal(pauseQueue.snapshot().activeId, heldId);
 pauseQueue.playbackEvent(heldId, 'ended');
 pauseQueue.pause();
 const sameViewerQuestion = pauseQueue.submit('Viewer', 'Tyrone: Second', 'held-second');
-const sameViewerReplay = pauseQueue.replay(heldId);
-assert.deepEqual(pauseQueue.snapshot().waitingIds, [sameViewerQuestion, sameViewerReplay]);
-assert.throws(() => pauseQueue.replay(heldId), /Queue full/u);
+assert.deepEqual(pauseQueue.snapshot().waitingIds, [sameViewerQuestion]);
+assert.throws(() => pauseQueue.submit('VIEWER', 'Tyrone: Third', 'held-third'), /outstanding/u);
 pauseQueue.remove(sameViewerQuestion);
-// A streamer replay does not prevent the viewer from submitting one new question.
-pauseQueue.submit('Viewer', 'Tyrone: Third', 'held-third');
-pauseQueue.remove(pauseQueue.snapshot().waitingIds[1]);
+const thirdQuestion = pauseQueue.submit('Viewer', 'Tyrone: Third', 'held-third');
 pauseQueue.resume();
 await flush();
-assert.equal(pauseCalls, 1);
+assert.equal(pauseCalls, 2);
 pauseQueue.setPlaybackPaused(true);
 pauseQueue.skip();
 pauseClock += 300_000;
 pauseQueue.tick();
 assert.equal(pauseQueue.snapshot().activeId, null);
 assert.equal(
-  pauseQueue.snapshot().requests.find((entry) => entry.id === sameViewerReplay)?.status,
+  pauseQueue.snapshot().requests.find((entry) => entry.id === thirdQuestion)?.status,
   'skipped',
 );
 pauseQueue.stopAndClear();
@@ -164,24 +161,18 @@ await flush();
 assert.equal(status(b), 'completed');
 assert.equal(generators.length, 2);
 assert.equal(status(c), 'waiting');
-const queuedReplay = queue.replay(b);
+const clearedWaiting = queue.submit('Waiting', 'Tyrone: Clear this question', 'event-clear');
 assert.equal(queue.snapshot().waitingIds.length, 2);
 queue.resume();
 await flush();
 assert.equal(queue.snapshot().activeId, c);
 queue.clear();
-assert.equal(status(queuedReplay), 'removed');
+assert.equal(status(clearedWaiting), 'removed');
 assert.equal(status(c), 'generating');
 queue.skip();
 generators[2]!.task.resolve('C late reply');
 await flush();
 assert.equal(plays.length, 1);
-const replay = queue.replay(b);
-await flush();
-assert.equal(generators.length, 3);
-assert.equal(speakers.length, 1);
-assert.equal(plays.at(-1), replay);
-finish(replay);
 
 const d = queue.submit('Dave', 'Tyrone: Failure test', 'event-fail');
 await flush();
@@ -218,14 +209,31 @@ speakers[2]!.task.resolve(audio);
 await flush();
 assert.equal(plays.length, beforeLateSpeech);
 queue.resume();
-let lastReplay = replay;
+const historyQueue = new RequestQueue({
+  pipeline: {
+    characters: testCharacters,
+    mode: 'demo',
+    async generate() {
+      return 'Synthetic history reply';
+    },
+    async synthesize() {
+      return audio;
+    },
+  },
+  playerReady: () => true,
+  play() {},
+  stop() {},
+  settings: { viewerCooldownMs: 0, globalCooldownMs: 0 },
+});
 for (let index = 0; index < 25; index++) {
-  lastReplay = queue.replay(lastReplay);
+  const id = historyQueue.submit('Viewer', 'Tyrone: History question', `history-${index}`);
   await flush();
-  finish(lastReplay);
+  historyQueue.playbackEvent(id, 'playing');
+  historyQueue.playbackEvent(id, 'ended');
 }
-assert(queue.snapshot().requests.length <= 23);
-assert(queue.snapshot().requests.filter((entry) => entry.replayAvailable).length <= 5);
+assert.equal(historyQueue.snapshot().requests.length, 23);
+assert(historyQueue.snapshot().requests.every((entry) => entry.status === 'completed'));
+historyQueue.stopAndClear();
 assert.equal(generators.length, 6);
 assert.equal(speakers.length, 3);
 
@@ -341,5 +349,5 @@ try {
   queue.stopAndClear();
 }
 console.log(
-  'Queue checks passed: bounds, viewer limits, duplicate events, cooldowns, expiry, sequential playback, pause/resume, remove/clear, stop, late generation/TTS discard, failure recovery, disconnect, cached replay, bounded history/cache, and HTTP/player integration. Simulated providers only.',
+  'Queue checks passed: bounds, viewer limits, duplicate events, cooldowns, expiry, sequential playback, pause/resume, remove/clear, stop, late generation/TTS discard, failure recovery, disconnect, bounded read-only history, and HTTP/player integration. Simulated providers only.',
 );

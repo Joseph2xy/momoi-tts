@@ -269,12 +269,22 @@ try {
     409,
   );
   assert.equal((await state()).status, 'completed');
-  await post('/api/requests/replay', { id: second.clip.id });
+  assert.equal((await fetch(base + second.clip.url)).status, 404);
+  assert.equal((await post('/api/requests/replay', { id: second.clip.id })).status, 404);
+  const completedEntry = (await state()).queue?.requests.at(-1);
+  assert(completedEntry);
+  assert(!Object.hasOwn(completedEntry, 'replayAvailable'));
+  assert(!Object.hasOwn(completedEntry, 'replayOf'));
+  await post('/api/requests', {
+    viewer: 'Viewer',
+    question: 'Tyrone: Disconnect during playback',
+    eventId: 'http3',
+  });
   await flush();
-  const replay = await state();
-  assert(replay.clip);
-  assert.notEqual(replay.clip.id, second.clip.id);
-  await post('/api/player/event', { session: a, id: replay.clip.id, event: 'playing' });
+  const third = await state();
+  assert(third.clip);
+  assert.notEqual(third.clip.id, second.clip.id);
+  await post('/api/player/event', { session: a, id: third.clip.id, event: 'playing' });
   await new Promise((resolve) => setTimeout(resolve, 3200));
   const replacement = (await (
     await post('/api/player/poll', { session: b })
@@ -286,7 +296,7 @@ try {
   await post('/api/player/release', { session: b });
   assert.equal((await state()).playerConnected, false);
   console.log(
-    'Offline playback passed: combined pause during generation/speech, long hold, skip while paused, player ownership/progress, immutable audio/ranges, cached replay, completion retry, and disconnect.',
+    'Offline playback passed: combined pause during generation/speech, long hold, skip while paused, player ownership/progress, immutable audio/ranges, unavailable completed audio/replay route, completion retry, and disconnect.',
   );
 } finally {
   server.closeAllConnections();

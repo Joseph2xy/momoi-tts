@@ -1,44 +1,60 @@
 # Project handoff
 
-Updated: 2026-10-09. Read [AGENTS.md](AGENTS.md) first. [README](README.md) owns commands/configuration, [architecture](docs/architecture.md) owns code boundaries, and [verification](docs/verification.md) owns test/provider evidence.
+Updated: 2026-10-09. Read [AGENTS.md](AGENTS.md) first. [README](README.md) owns commands/configuration, [architecture](docs/architecture.md) owns code boundaries, [verification](docs/verification.md) owns evidence, and [streamer setup](docs/streamer-setup.md) describes the currently working Windows setup.
 
-## Confirmed direction
+## Latest direction: one browser interface
 
-- The main streamer screen contains playback, queue controls, and Twitch connection controls. The user confirmed moving manual questions off that screen into a separate testing page at `/testing`. Testing uses the shared queue but never owns audio; keep the main screen open in another tab. Closing/refreshing the audio owner cancels active work and pauses the queue; reopening requires Resume. The server stays running until Quit.
-- Viewers choose a personality through one shared Channel Points reward using a name parameter. Each personality has an assigned voice. Missing/unrecognized names are rejected and refunded after Twitch confirms; there is no default character. Tyrone is the first example; adding more profiles is supported. App/reward naming is deferred.
-- Functional pieces come before final models, output-quality evaluation, persona editing, voice selection, and fine-tuning. The user expects paid models later but has authorized no paid access, funded account, budget, purchase, or paid usage. Easy model switching matters; no final IDs or shortlist are selected.
-- The user authorized the proposed organization pass. Characters now have a cohesive module/data home, scripts are grouped by purpose, the browser source is flat, and application assembly/lifetime is separated from HTTP serving. Disposable output uses `.generated/`; private settings/recovery keep their existing `.local/` paths. Prettier is development-only. No rewrite, new application framework, provider change, or feature removal was needed.
+The intended result is one local browser interface for operation and configuration, with management separate from Activity. This supersedes launcher-based management. The user selected sidebar navigation and dark mode, but dislikes the current theme/UI; detailed visual design will be handled separately later. Selection of the layout does not approve its current palette, detailed controls, or every section's contents.
 
-## Current state
+### User-confirmed workflows
 
-Repository: [Joseph2xy/placeholder](https://github.com/Joseph2xy/placeholder), private, with `origin` configured. The user chose a temporary placeholder name; final repository/app naming remains deferred. The existing `master` branch contains the initial project commit.
+- A desktop shortcut quietly starts/reuses the local server and opens the browser: setup on first use, Activity on later launches. Guided setup reuses Settings/Connections controls and remains reopenable from Settings.
+- Navigation uses Activity, Connections, and Settings. Activity is for briefly checking current/waiting work and playback intervention in a mostly unattended stream utility. Every visible element needs a purpose.
+- Closing the audio-owner tab cancels active work and pauses the queue; the server stays running. Reopening requires Resume. Explicit shutdown belongs outside Activity; its exact placement is not decided.
+- Local browser Settings may accept API keys for private backend storage. Never return saved keys to the page; show configured/not-configured metadata afterward. AGENTS.md reflects this approved entry flow.
+- Settings changes let the current request finish with its original settings, then apply before the next request starts. Waiting work stays queued; preserve character selection, cancellation, bounded queues, and late-result rejection.
+- Save validates and stores settings locally. Connection checks and response/voice tests are separate explicit actions. Saving never invokes providers or creates Twitch rewards. The existence of these controls does not authorize live trials or account actions.
+- Compact rows show each question once; expansion reveals only its response. Waiting entries without a response need no dropdown. Past entries are read-only, with no replay or dedicated review workflow. Development controls, testing, and Quit do not belong on Activity.
+- Viewers choose a personality through one shared Channel Points reward using `Name: question`. Each personality has an assigned voice. Missing/unknown names are rejected and refunded after Twitch confirms; no default character. Tyrone is the first example; adding profiles is supported.
+- Functional pieces precede final model selection, quality evaluation, persona/prompt editing, voice selection, and fine-tuning. Easy model switching matters; generation and hosted speech remain independently replaceable.
+- The initial connected functional trial uses a free OpenRouter model after discussing and verifying free access. No final model, paid account, funded balance, budget, spending, or paid fallback is authorized.
 
-One isolated activity-feed preview is retained at http://127.0.0.1:5174/designs.html (run command in README). It uses synthetic state, no real audio or provider/Twitch calls; the existing functional frontend remains in use. Superseded layouts, dead preview controls/hooks, redundant styles, and duplicate design notes have been removed. The Vite review server is left running.
+StreamElements Activity Feed is inspiration, not an approved design to copy. Conversation-style layouts were ruled out. Reference screenshot: `C:/Users/yby/.t3/userdata/attachments/652a6045-80b4-42b0-8ee4-fe55fe78a36c-7ccdbe75-29a2-4603-9ac9-2b61603f4651.png`.
 
-### Frontend direction
+### Proposed contents and unresolved choices
 
-- Confirmed usage: mostly unattended stream utility, briefly checked to inspect the queue or skip/pause.
-- Confirmed layout direction: prominent Pause/Skip/Mute; current request pinned above waiting and recent activity; details expand on demand; secondary Twitch, volume, Testing, and Stop and clear controls. The StreamElements screenshots inspire the feel, not a copied screen.
-- Theme direction accepted: violet charcoal with coral accents inspired by https://www.taniarascia.com/ (theme only). Primary questions, expanded content, and detail controls now use plain white; metadata stays muted. Character/status colours provide distinction.
-- Pending: improve the bars and expandable/dropdown controls, complete visual review, then integrate the full frontend. Current dimensions and native controls are provisional, not approved final choices. Conversation-style layouts are ruled out.
-- The user is willing to consider implementation changes for better UX. Discuss substantial changes before proceeding; this is not authorization for a rewrite or provider change.
+| Area | Proposed contents |
+| --- | --- |
+| Activity | Playback controls, current/waiting requests, read-only past dialogue |
+| Connections | Twitch authorization/connection, explicit reward setup |
+| Settings | Generation provider/model, independent speech provider, character/voice assignments, playback preferences |
+| Guided setup | Reuse the same controls on first use and when reopened |
 
-Design rationale: one compact event feed supports brief checks during a stream; full replies stay secondary. Colour conveys status and character, with quiet surface depth. No dashboard metrics, sidebar, decorative player, or unneeded filters.
+Exact routes, section contents, diagnostics placement, setup readiness criteria, missing-prerequisite/install handling, and shutdown placement remain open. The mockup's three-step setup, settings index, and Application subsection are proposals. No framework, major rewrite, tray app, service, native shell, or installer is approved.
 
-The organization pass preserves viewer input, profile/voice routing, bounded queues, cancellation, refunds, and playback. Tyrone remains the only configured character, using the existing development prompt/voice. The visible “Stream characters” heading is descriptive, not an agreed product name; launcher filenames, internal identifiers, and the provisional reward title retain Tyrone pending naming.
+Validated backend-owned reads/writes to existing `.local/` files, preserving environment precedence and recovery state, are proposed implementation details. Resolve validation, Save/apply presentation, and settings requiring relaunch before integration. Account authorization remains explicit and follows supported provider flows. Keep offline validation distinct from connected checks and inference/TTS trials.
 
-Build, formatting, and the ten non-Codex offline test files passed after relocation/runtime changes. Browser playback/rejection/replay/Quit, packaging contents, PowerShell syntax, setup prerequisite checks, and the moved Windows launcher passed; details and limits live in [verification](docs/verification.md). Both isolated review demos were stopped. The local demo that was already running on port 3210 was left running; its old `.local/web/` build is retained while it remains in use. New builds use `.generated/web/`.
+## Current implementation
 
-Installed Codex CLI **0.162.0** remains rejected by the **0.160.1** guard. Do not relax the guard or replace the global installation just to obtain passing tests; discuss repair and recheck the tool boundary separately. OpenRouter has offline evidence but no usable live dialogue accepted yet. The user accepts that gap while focusing on app functionality.
+Repository: private [Joseph2xy/placeholder](https://github.com/Joseph2xy/placeholder), branch `master`. Naming is temporary. The repository includes the Codex repair, selected sidebar mockup, workflow decisions, and cleanup described below.
 
-## Temporary private development settings
+- The browser mockup at http://127.0.0.1:5174/designs.html uses the selected dark sidebar and synthetic Activity/Connections/Settings/setup controls. Run `npm run preview`. It has no app APIs, private-config access, persistence, provider/Twitch calls, or audio. Use placeholder keys only. Functional configuration application, startup readiness, character creation, and tab-close lifetime are not implemented by the mockup.
+- The functional frontend is still the working app. `/testing` submits to its shared queue without owning audio. One control tab owns audio; closing/refreshing it cancels active work and pauses the queue. Quit or Ctrl+C stops the server. Browser-management integration is still pending.
+- Replay was removed end to end: functional UI, HTTP endpoint, queue method, public flags, cache, and obsolete tests/instructions. Current audio is released at terminal outcomes. History remains bounded and read-only. The duplicate current question/response panel was removed; response expansion survives control updates.
+- The existing hidden Windows launcher starts/reuses the app, opens the browser, and exits. The Windows setup wizard remains necessary until browser setup works. Audition scripts remain for the later quality stage, and fixed Twitch scripts remain for separately authorized account/reward setup.
+- `.generated/` owns current builds and check output; `.local/` owns private configuration/recovery/logs. The mockup is excluded from production build inputs, production fingerprints, and transfer packages. Dependencies, runtime modules, tests, configuration examples, and character files have active purposes.
+- Codex CLI **0.162.0** remains the exact guarded version and passed the offline dialogue-only boundary probe. No global installation/provider change or new live Codex trial occurred.
 
-Ignored `.local/generation.env` still selects `nvidia/nemotron-3.5-lightning:free` with a temporary 4,096-token ceiling and a temporary user-supplied key. These are development settings, not final choices. Both bounded generation-only trial budgets are exhausted; further trials/reasoning adjustments are deferred. Replace temporary OpenRouter/Fish keys before ongoing use as intended. Never reproduce them in docs or diagnostics. Connected provider conditions and commercial terms must be reverified before further use; historical evidence lives in verification.
+### Cleanup limit
 
-## Open decisions and deferred work
+Automatic approval review rejected disposable-folder batch removal, then narrower deletion of `.local/web` and the verification ZIP, stating only **"blocked by policy"**. No removal occurred. The obsolete `.local/web` build and scratch `.generated/releases/Tyrone-20261009-144956-c70f0669.zip` remain unresolved; do not describe them as needed recovery files or treat rejection as a permanent project rule. Credentials, account state, setup progress, and launcher logs were preserved. Current `.generated/web`, boundary-check output, and Vite caches serve active development/test workflows. No archive or second implementation was created.
 
-- Demo can fail on incomplete private Twitch settings even for manual-only testing. Better isolation remains a recommendation awaiting discussion.
-- Queue failures replace safe provider guidance with generic phase errors. Improving actionable errors remains a recommendation awaiting discussion.
-- Broader setup workflow and the graphical wizard remain provisional. Terminal setup is acceptable, polish is low priority, and no installer is required.
-- Live Twitch authorization/reward creation, live speech trials, OBS linking, destination-PC checks, and final model/persona/voice evaluation require separate discussion. No real Twitch application/channel/reward is configured. No additional connected trial or spending is authorized.
-- Avatars, vision, microphone input, autonomous commentary, local model hosting, and subscriptions/donations remain outside current scope, open to later discussion.
+## Temporary development settings and deferred work
+
+Ignored `.local/generation.env` still selects `nvidia/nemotron-3.5-lightning:free` with a temporary 4,096-token ceiling and temporary user-supplied key. These are development settings, not final choices. Both authorized three-request generation-only trial budgets are exhausted. No accepted usable live OpenRouter dialogue exists; the user accepts that gap while focusing on functionality. Replace temporary OpenRouter/Fish keys before ongoing use and reverify access, allowance, and commercial terms before connected use. Never reproduce saved keys.
+
+Live Twitch authorization/reward creation, live speech trials, OBS linking, destination-PC checks, and final provider/persona/voice evaluation require separate discussion. No real Twitch app/channel/reward is configured. No further trial/spending is authorized. Demo isolation from incomplete private Twitch settings and actionable queue error guidance remain recommendations awaiting discussion.
+
+Avatars, vision, microphone input, autonomous commentary, local model hosting, subscriptions/donations remain outside current scope, open to later discussion. Naming remains deferred; `Stream characters`/`Stream controls` are descriptive labels.
+
+Next: resolve remaining workflow details using the sidebar mockup, then integrate the authorized browser-management component. Replace/remove the functional frontend, wizard, and mockup only when their replacements work. Preserve dialogue-only generation, privacy, queue/refund/cancellation behavior, and audio ownership. Theme/UI refinement stays in its separate later pass.

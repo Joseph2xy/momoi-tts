@@ -80,6 +80,11 @@ function renderFeed(queue: QueueState) {
   if (signature === feedSignature) return;
   feedSignature = signature;
   const feed = get('feed');
+  const expanded = new Set(
+    [...feed.querySelectorAll<HTMLDetailsElement>('details[open]')].map(
+      (reply) => reply.dataset.requestId,
+    ),
+  );
   const order = [queue.activeId, ...queue.waitingIds];
   const ordered = [
     ...order.flatMap((id) => queue.requests.filter((entry) => entry.id === id)),
@@ -91,7 +96,7 @@ function renderFeed(queue: QueueState) {
     const heading = document.createElement('div');
     heading.className = 'row';
     const name = document.createElement('strong');
-    name.textContent = `${entry.characterName} · ${entry.viewer}${entry.replayOf ? ' · replay' : ''}`;
+    name.textContent = `${entry.characterName} · ${entry.viewer}`;
     const badge = document.createElement('span');
     badge.className = 'pill';
     badge.dataset.status = entry.status;
@@ -107,6 +112,8 @@ function renderFeed(queue: QueueState) {
     if (entry.dialogue) {
       const reply = document.createElement('details');
       reply.className = 'request-reply';
+      reply.dataset.requestId = entry.id;
+      reply.open = expanded.has(entry.id);
       const summary = document.createElement('summary');
       summary.textContent = 'View reply';
       const dialogue = document.createElement('blockquote');
@@ -120,14 +127,13 @@ function renderFeed(queue: QueueState) {
       error.textContent = entry.error;
       row.append(error);
     }
-    if (entry.status === 'waiting' || entry.replayAvailable) {
+    if (entry.status === 'waiting') {
       const action = document.createElement('button');
       action.className = 'secondary small';
       action.dataset.id = entry.id;
-      action.dataset.action = entry.status === 'waiting' ? 'remove' : 'replay';
-      action.textContent = entry.status === 'waiting' ? 'Remove' : 'Replay';
-      action.disabled =
-        !connected || pending || (entry.status !== 'waiting' && queue.waitingIds.length >= 2);
+      action.dataset.action = 'remove';
+      action.textContent = 'Remove';
+      action.disabled = !connected || pending;
       row.append(action);
     }
     return row;
@@ -205,11 +211,6 @@ function render(next: PlaybackState) {
   get('queue-note').textContent = queue?.paused
     ? 'Paused. Speech is held and waiting requests stay here until you resume.'
     : 'Responses play automatically, one at a time.';
-  get('response-content').hidden = !current;
-  get('current-question').textContent = current?.question ?? '';
-  get('current-question').hidden = !current;
-  get('current-dialogue').textContent = current?.dialogue ?? '';
-  get('current-dialogue').hidden = !current?.dialogue;
   get('playback-progress').hidden =
     !next.progress || !['ready', 'playing', 'blocked'].includes(next.status);
   if (next.progress) {

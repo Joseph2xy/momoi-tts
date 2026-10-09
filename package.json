@@ -13,6 +13,7 @@
     "build:browser": "vite build",
     "build": "npm run typecheck && npm run build:browser",
     "dev:browser": "vite build --watch",
+    "preview": "vite --host 127.0.0.1 --port 5174 --strictPort",
     "dev:server": "node --watch --env-file-if-exists=.local/generation.env --env-file-if-exists=.local/fish.env --env-file-if-exists=.local/twitch.env src/app/main.ts",
     "start": "node --env-file-if-exists=.local/generation.env --env-file-if-exists=.local/fish.env --env-file-if-exists=.local/twitch.env scripts/launch/run.ts",
     "demo": "node --env-file-if-exists=.local/twitch.env scripts/launch/run.ts --demo",

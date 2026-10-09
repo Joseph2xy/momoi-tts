@@ -15,6 +15,8 @@ foreach ($directory in @('src', 'web', 'scripts', 'characters/prompts', 'config/
     $items = @(Get-ChildItem -LiteralPath $tree -Recurse -Force)
     foreach ($item in $items) {
         if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw 'Packaging refuses linked files or directories.' }
+        # The browser-management mockup is a repository development workflow, not the app.
+        if ($directory -eq 'web' -and $item.Name -in @('designs.html', 'designs.ts', 'designs.css')) { continue }
         if (-not $item.PSIsContainer -and $item.Extension -in @('.ts', '.ps1', '.css', '.html', '.txt', '.example')) {
             $relativeFiles += $item.FullName.Substring($projectRoot.Length + 1)
         }

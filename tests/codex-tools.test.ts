@@ -1,7 +1,7 @@
 // Offline integration probe: inspect the actual outgoing CLI request.
 // A local fake provider never forwards requests and receives only a dummy key.
 import http from 'node:http';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -22,13 +22,28 @@ interface ProbeProviderRequest {
 
 interface ProbeRequestRecord {
   path: string | undefined;
+  toolsDeclared: boolean;
+  validToolList: boolean;
   tools: string[];
   toolChoice: string | undefined;
   viewerInputFound: boolean;
 }
 
 const executable = findCodex();
-assertTestedVersion(executable);
+const cliVersion = execFileSync(executable, ['--version'], {
+  encoding: 'utf8',
+  windowsHide: true,
+  timeout: 5000,
+}).trim();
+// Explicit offline upgrade review only; the application version guard stays intact.
+const candidateVersion = process.argv.find((arg) => arg.startsWith('--candidate-version='));
+if (candidateVersion) {
+  const expectedVersion = candidateVersion.slice('--candidate-version='.length);
+  assert.match(expectedVersion, /^\d+\.\d+\.\d+$/);
+  assert.equal(cliVersion, `codex-cli ${expectedVersion}`);
+} else {
+  assertTestedVersion(executable);
+}
 const root = await mkdtemp(path.join(tmpdir(), 'tyrone-probe-'));
 const work = path.join(root, 'work');
 const instructions = path.join(root, 'instructions.txt');
@@ -41,7 +56,9 @@ const server = http.createServer(async (req, res) => {
   const data = JSON.parse(body) as ProbeProviderRequest;
   requests.push({
     path: req.url,
-    tools: (data.tools ?? []).map((t) => t.name ?? t.type),
+    toolsDeclared: Array.isArray(data.tools),
+    validToolList: data.tools === undefined || Array.isArray(data.tools),
+    tools: Array.isArray(data.tools) ? data.tools.map((t) => t.name ?? t.type) : [],
     toolChoice: data.tool_choice,
     viewerInputFound: (JSON.stringify(data.input) ?? '').includes('viewer_question'),
   });
@@ -127,6 +144,8 @@ try {
   assert.equal(code, 0, 'Synthetic dialogue must complete successfully.');
   assert.equal(requests.length, 1);
   assert(requests[0]);
+  assert.equal(requests[0].path, '/responses');
+  assert.equal(requests[0].validToolList, true, 'Tools must be omitted or an array.');
   assert.deepEqual(requests[0].tools, [], 'No tools may be offered to the model.');
   assert.equal(requests[0].viewerInputFound, true);
   const events = stdout
@@ -153,7 +172,7 @@ try {
     events.some((e) => e.type === 'item.completed' && e.item?.text === 'Offline dialogue test.'),
   );
   const report = {
-    cliVersion: '0.160.1',
+    cliVersion,
     offline: true,
     requests,
     syntheticDialogueReceived: true,

@@ -64,10 +64,6 @@ export async function routeCommand(
     queue.remove(body.id);
     return snapshot();
   }
-  if (path === '/api/requests/replay') {
-    queue.replay(body.id);
-    return snapshot();
-  }
   if (path === '/api/playback/pause') {
     session.pause();
     return snapshot();
@@ -77,7 +73,7 @@ export async function routeCommand(
     return snapshot();
   }
   if (path === '/api/queue/skip') {
-    session.stop('Stopped. Replay manually to play again.');
+    session.stop('Response skipped.');
     queue.skip();
     return snapshot();
   }

@@ -67,6 +67,7 @@ export class PlaybackSession {
     this.setSpeechPaused(false);
     this.state.progress = null;
     this.state.message = message;
+    this.#audio = null;
   }
   setSpeechPaused(paused: boolean): boolean {
     if (!['ready', 'playing', 'blocked'].includes(this.state.status)) {
@@ -86,12 +87,13 @@ export class PlaybackSession {
     if (this.#owner && Date.now() - this.#owner.seen > leaseMs) {
       this.#owner = null;
       this.state.playerConnected = false;
-      this.stop('Player disconnected. Replay manually when it reconnects.');
+      this.stop('Player disconnected. Queue paused; resume when ready.');
       this.queue.disconnect();
     }
     if (this.busy && !this.state.speechPaused && Date.now() - this.#clipStarted > 120_000) {
       this.state.status = 'failed';
       this.state.message = 'Playback timed out.';
+      this.#audio = null;
       if (this.state.clip) this.queue.playbackEvent(this.state.clip.id, 'failed');
     }
     this.queue.tick();
@@ -138,9 +140,12 @@ export class PlaybackSession {
       this.state.message = 'Playback completed.';
     } else if (event === 'failed') {
       this.state.status = 'failed';
-      this.state.message = 'The player could not play this audio. Replay manually.';
+      this.state.message = 'The player could not play this audio. Check browser audio access.';
     } else return 'invalid';
-    if (event === 'ended' || event === 'failed') this.setSpeechPaused(false);
+    if (event === 'ended' || event === 'failed') {
+      this.setSpeechPaused(false);
+      this.#audio = null;
+    }
     this.queue.playbackEvent(this.state.clip!.id, event);
     return 'ok';
   }

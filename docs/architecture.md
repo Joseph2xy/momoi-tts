@@ -9,7 +9,7 @@ One local Node/TypeScript application serves a streamer control page and a separ
 | `src/app/` | Read configuration, compose providers/runtime, start and stop the application |
 | `src/characters/` | Character types, trusted catalog loading, viewer name selection |
 | `characters/` | Editable catalog and character-specific prompts |
-| `src/queue/` | Admission, cooldowns, deduplication, request lifecycle, cancellation, history/replay |
+| `src/queue/` | Admission, cooldowns, deduplication, request lifecycle, cancellation, read-only history |
 | `src/playback/` | Audio-owner lease, current clip, progress, speech holds, playback acknowledgements |
 | `src/providers/` | Shared dialogue validation and OpenRouter, Codex, and Fish adapters |
 | `src/twitch/` | Redemption intake, Twurple transport, reward setup, private tokens/outcome journal |
@@ -27,13 +27,13 @@ One local Node/TypeScript application serves a streamer control page and a separ
 
 ## Application flow
 
-`web/designs.html`, `designs.ts`, and `designs.css` form a temporary, isolated activity-feed preview served by Vite development mode. They do not import app playback, fetch app APIs, or enter the production Vite inputs. Their queue state and controls are illustrative. Keep it for ongoing design review; the current production frontend is still the functional implementation. Remove the preview once integration makes it redundant.
+`web/designs.html`, `designs.ts`, and `designs.css` form a temporary browser-management mockup served by Vite development mode. The selected sidebar layout uses dark mode and sample Activity, Connections, Settings, and guided setup controls; theme and detailed UI design are deferred. All state is in memory. They do not import app playback, fetch app APIs, access private settings, persist credentials, or enter production builds, build fingerprints, or transfer packages. Settings validation, connection/test actions, authorization/reward setup, and shutdown are illustrative. Keep it for ongoing workflow review; the production frontend remains the functional implementation. Remove the mockup once integration makes it redundant.
 
 `src/app/main.ts` selects demo/live adapters and starts `createAppServer`. `src/app/runtime.ts` owns the playback session, its queue, Twitch intake, periodic expiry checks, and shutdown. `src/app/server.ts` connects that runtime to HTTP and disposes it on server close. The HTTP server consumes the runtime through a small structural interface; it constructs no queue, provider, or Twitch transport.
 
 Manual requests from `/testing` and Twitch requests enter the same queue using `Name: question`. Character selection resolves only trusted catalog names. Missing/unknown names and empty questions fail before provider dispatch. Viewer content cannot select files, voice IDs, or providers. Each accepted job snapshots its character profile; only its question reaches generation as untrusted conversational data. Public state contains character IDs/names, not prompts or voice settings.
 
-The queue calls independent generate/synthesize operations through `QueuePipeline`, without importing provider implementations. `src/app/pipeline.ts` binds them to configured adapters. A slot remains occupied through acknowledged playback. Skip/stop/timeout invalidates late generation and speech results. History and audio replay caches are bounded; replay uses its original character/audio with no providers or new redemption.
+The queue calls independent generate/synthesize operations through `QueuePipeline`, without importing provider implementations. `src/app/pipeline.ts` binds them to configured adapters. A slot remains occupied through acknowledged playback. Skip/stop/timeout invalidates late generation and speech results. History is bounded and read-only. Playback owns only the current audio buffer and releases it after completion, cancellation, failure, or timeout. There is no replay API, queue path, or audio cache. The functional frontend shows each question once and preserves response expansion through control updates.
 
 ## Playback and generation boundaries
 

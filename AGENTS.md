@@ -30,7 +30,7 @@ Read `PROJECT_HANDOFF.md` before making project decisions. Use `README.md` for c
 - Keep generation and hosted TTS independently replaceable. Implement providers within the discussed scope; local model hosting is currently outside scope, not an immutable architectural constraint.
 - Treat viewer input as untrusted data, separate from character instructions.
 - Enforce dialogue-only generation without tools, shell, files, browser automation, or computer control. Prompt instructions alone do not restrict access. Recheck the boundary after integration or CLI changes.
-- Keep credentials out of source control, logs, chat, and browser pages. Use private configuration and redact provider errors.
+- Keep credentials out of source control, logs, chat, and returned browser state. User-approved local browser Settings may accept API-key entry for private backend storage; never return saved keys to the page, and show only configured/not-configured status afterward. Use private configuration and redact provider errors.
 - Preserve bounded queues, cooldowns, duplicate-event protection, sequential playback, cancellation, and timeouts. Skipped or stopped work must never play through a late result.
 - Do not infer API billing access or unlimited allowance from a consumer subscription. Supported subscription-backed CLI access is acceptable.
 - Verify provider capabilities, allowance, prices, and terms before committing or spending money. Do not purchase access, consume paid usage, install models, or change OBS/Twitch configuration merely to prepare a plan.

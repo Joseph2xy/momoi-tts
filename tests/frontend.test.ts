@@ -25,6 +25,8 @@ try {
     if (page === '/') {
       assert(!html.includes('question-form'));
       assert(!html.includes('Send a test question'));
+      assert(!html.includes('current-question'));
+      assert(!html.includes('current-dialogue'));
     } else {
       assert(html.includes('question-form'));
       assert(html.includes('Testing'));

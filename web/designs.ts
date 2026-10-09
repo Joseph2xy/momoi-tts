@@ -1,274 +1,355 @@
+// Sidebar browser mockup. Dark mode is confirmed; theme and UI refinement are deferred.
+// Synthetic state only: no application APIs, providers, storage, or audio.
 export {};
-type Request = {
+type Page = 'activity' | 'connections' | 'settings';
+type Section = 'generation' | 'speech' | 'characters' | 'playback' | 'app';
+interface Request {
+  id: string;
   viewer: string;
   question: string;
-  reply: string;
-  failed?: boolean;
+  response?: string;
   outcome?: string;
-};
-const sample: Request[] = [
+}
+const samples: Request[] = [
   {
+    id: 'one',
     viewer: 'pixelpilot',
     question: 'How do I stop tilting after a bad ranked game?',
-    reply:
-      'Take the headset off. Drink some water. You lost a match, not your entire bloodline. Queue again when you can blame yourself at least a little.',
+    response:
+      'Take five minutes away from the game. Get some water. Come back when you can name one thing to improve instead of five teammates to blame.',
   },
   {
+    id: 'two',
     viewer: 'moonbyte',
-    question: 'What would you do with one million channel points?',
-    reply:
-      'Save them. The moment you spend a million points, they add something better to the shop. That is how they get you.',
+    question: 'What would you do with a million channel points?',
+    response:
+      'Save them until something good appears. Spending them just because you have them is how you end up paying a million points for a sound effect.',
   },
   {
+    id: 'three',
     viewer: 'softreset',
     question: 'Is a hot dog a sandwich?',
-    reply:
-      'It is lunch. Eat it before it gets cold. We can argue about the architecture afterwards.',
+    response: 'It is lunch. Eat it while it is warm. We can debate the construction afterwards.',
   },
 ];
-let active: Request | undefined;
-let waiting: Request[] = [];
-let history: Request[] = [];
+let current: Request | undefined = { ...samples[0]! };
+let waiting = samples.slice(1).map((r) => ({ ...r }));
+let history: Request[] = [
+  {
+    id: 'past-one',
+    viewer: 'nightowl',
+    question: 'Any advice for my first stream?',
+    response:
+      'Keep talking, even when nobody is there yet. You are practising for the people who arrive later.',
+    outcome: 'Answered',
+  },
+  {
+    id: 'past-two',
+    viewer: 'heyitskai',
+    question: 'How do I get better at aiming?',
+    response:
+      'Practise a little every day. Keep the sensitivity steady. A new mouse will not fix the habit of panicking.',
+    outcome: 'Answered',
+  },
+];
+let page: Page = 'activity';
 let paused = false;
 let muted = false;
-let volume = 80;
-let elapsed = 5;
-let phase = 'playing';
-let testing = false;
 let connected = false;
-let simulatedTime = false;
-
-const app = document.querySelector<HTMLDivElement>('#app')!;
-let scenario = 'playing';
+let authorized = false;
+let reward = false;
+let volume = 80;
+let setupStep: number | undefined;
+let generationConfigured = false;
+let speechConfigured = false;
+let voiceConfigured = false;
+let pendingSettings = false;
+let stopped = false;
+const draft: Record<string, string> = {
+  provider: 'openrouter',
+  model: '',
+  generationKey: '',
+  speechKey: '',
+  voice: '',
+  playback: '80',
+};
+const pages: Page[] = ['activity', 'connections', 'settings'];
+const sections: Section[] = ['generation', 'speech', 'characters', 'playback', 'app'];
+const labels: Record<string, string> = {
+  activity: 'Activity',
+  connections: 'Connections',
+  settings: 'Settings',
+  generation: 'Generation',
+  speech: 'Speech',
+  characters: 'Characters',
+  playback: 'Playback',
+  app: 'Application',
+};
+const app = document.querySelector<HTMLElement>('#app')!;
+const feedback = document.querySelector<HTMLElement>('#feedback')!;
 const escape = (value: string) =>
   value.replace(
     /[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   );
-function notify(message: string) {
-  document.querySelector('#feedback')!.textContent = message;
-}
-function reset() {
-  active = { ...sample[0]! };
-  waiting = sample.slice(1).map((r) => ({ ...r }));
-  history = [
-    {
-      viewer: 'nightowl',
-      question: 'Any advice for my first stream?',
-      reply:
-        'Talk even when nobody is watching. Especially then. You are practising for the people who will show up later.',
-    },
-  ];
-  paused = false;
-  muted = false;
-  volume = 80;
-  testing = false;
-  elapsed = 5;
-  phase = 'playing';
-  simulatedTime = false;
-  scenario = 'playing';
-  render();
-  notify('');
-}
-function icon(name: string) {
+function icon(name: string, size = 18) {
   const paths: Record<string, string> = {
+    activity: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
+    connections: '<path d="M8 3v4m8-4v4M6 7h12v3a6 6 0 0 1-12 0ZM12 16v5"/>',
+    settings: '<path d="M4 7h16M4 17h16M9 4v6m6 4v6"/>',
     pause: '<path d="M8 5v14M16 5v14"/>',
-    resume: '<path d="m8 5 11 7-11 7Z"/>',
+    play: '<path d="m8 5 11 7-11 7Z"/>',
     skip: '<path d="m4 5 10 7L4 19ZM19 5v14"/>',
-    mute: '<path d="M4 9h4l5-4v14l-5-4H4ZM17 8l5 8m0-8-5 8"/>',
-    sound: '<path d="M4 9h4l5-4v14l-5-4H4Zm13-1q5 4 0 8"/>',
+    mute: '<path d="M3 9h4l5-4v14l-5-4H3ZM17 8l5 8m0-8-5 8"/>',
+    sound: '<path d="M3 9h4l5-4v14l-5-4H3Zm14-1q5 4 0 8"/>',
+    close: '<path d="m6 6 12 12M6 18 18 6"/>',
   };
-  return `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]}</svg>`;
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] ?? ''}</svg>`;
 }
-function header() {
-  return `<header class="app-header"><h1>${testing ? 'Testing' : 'Activity'}</h1><span class="demo-label">Demo</span></header>`;
+function button(action: string, text: string, extra = '') {
+  return `<button type="button" data-action="${action}" ${extra}>${text}</button>`;
+}
+function notify(text: string) {
+  feedback.textContent = text;
+}
+function state(label: string, ready: boolean) {
+  return `<span class="connection-state ${ready ? 'ready' : ''}"><span class="dot"></span>${label}</span>`;
+}
+function navigation() {
+  return `<nav class="navigation" aria-label="Main navigation">${pages.map((p) => button(`page-${p}`, `${icon(p)}<span>${labels[p]}</span>`, `aria-current="${page === p && setupStep === undefined ? 'page' : 'false'}"`)).join('')}</nav>`;
+}
+function row(request: Request, status: string, kind: 'current' | 'waiting' | 'past') {
+  const response = kind === 'waiting' ? undefined : request.response;
+  const line = `<span class="${response ? 'chevron' : 'chevron-space'}" aria-hidden="true"></span><span class="character">Tyrone</span><strong class="viewer">${escape(request.viewer)}</strong><span class="question">${escape(request.question)}</span><span class="status">${status}</span>`;
+  return `<article class="request ${kind}">${response ? `<details data-request-id="${request.id}"><summary class="request-line">${line}</summary><div class="expanded"><p>${escape(response)}</p></div></details>` : `<div class="request-line">${line}</div>`}${kind === 'waiting' ? button('remove', icon('close', 16), `class="remove" data-id="${request.id}" aria-label="Remove question from ${escape(request.viewer)}"`) : ''}</article>`;
 }
 function transport() {
-  return `<section class="transport" aria-label="Playback controls"><button data-action="pause" aria-pressed="${paused}">${icon(paused ? 'resume' : 'pause')}<span>${paused ? 'Resume' : 'Pause'}</span></button><button data-action="skip" ${active ? '' : 'disabled'}>${icon('skip')}<span>Skip current</span></button><button data-action="mute" aria-pressed="${muted}">${icon(muted ? 'sound' : 'mute')}<span>${muted ? 'Unmute' : 'Mute'}</span></button></section>`;
+  return `<section class="transport" aria-label="Playback controls"><div class="transport-main">${button('pause', `${icon(paused ? 'play' : 'pause')}<span>${paused ? 'Resume' : 'Pause'}</span>`, `class="primary" aria-pressed="${paused}"`)}${button('skip', `${icon('skip')}<span>Skip current</span>`, current ? '' : 'disabled')}${button('mute', `${icon(muted ? 'sound' : 'mute')}<span>${muted ? 'Unmute' : 'Mute'}</span>`, `aria-pressed="${muted}"`)}</div><details class="menu" id="options"><summary>Options</summary><div class="menu-panel"><label class="volume" for="volume">Volume <output>${volume}%</output></label><input id="volume" type="range" min="0" max="100" value="${volume}">${button('clear', 'Clear waiting', waiting.length ? '' : 'disabled')}${button('stop', 'Stop and clear', `class="danger" ${current || waiting.length ? '' : 'disabled'}`)}</div></details></section>`;
 }
-function toolbar() {
-  return `<div class="toolbar"><div class="connection"><span class="connection-dot" data-connected="${connected}"></span><span>Twitch ${connected ? 'connected' : 'disconnected'}</span><button class="text-button" data-action="connect">${connected ? 'Disconnect' : 'Connect'}</button></div><div class="sound"><label for="volume">Volume</label><input id="volume" type="range" min="0" max="100" value="${volume}"><output for="volume">${volume}%</output></div><button class="text-button" data-action="testing">Testing</button><span class="queue-count">${paused ? 'Paused · ' : ''}${waiting.length}/2 waiting</span></div>`;
+function activity() {
+  return `<div class="activity-layout">${transport()}<div class="activity-feed"><section class="feed" aria-label="Current and waiting requests">${current ? row(current, paused ? 'Held' : 'Speaking', 'current') : `<p class="empty">${paused ? 'Queue paused. Resume when you’re ready.' : 'Ready for viewer questions.'}</p>`}${waiting.map((r, i) => row(r, i === 0 ? 'Next' : 'Waiting', 'waiting')).join('')}</section><h2 class="history-label">Earlier</h2><section class="feed history" aria-label="Earlier questions and responses">${history.map((r) => row(r, r.outcome ?? 'Answered', 'past')).join('')}</section></div></div>`;
 }
-function row(r: Request, status: string, action?: string, index?: number) {
-  const isCurrent =
-    status === 'Playing' ||
-    status === 'Paused' ||
-    status === 'Preparing' ||
-    status === 'Audio blocked';
-  return `<article data-status="${escape(status)}" class="event ${isCurrent ? 'current' : ''} ${r.failed ? 'failed' : ''}"><div class="event-line"><span class="event-status">${status}</span><span class="character">Tyrone</span><strong class="viewer">${escape(r.viewer)}</strong><p class="question-preview">${escape(r.question)}</p>${action ? `<button class="text-button row-action" data-action="${action}" data-index="${index}" ${action === 'replay' && waiting.length >= 2 ? 'disabled' : ''}>${action === 'remove' ? 'Remove' : 'Replay'}</button>` : '<span></span>'}</div>${isCurrent && phase === 'playing' ? `<div class="progress-line"><progress max="20" value="${elapsed}" aria-label="Speech playback progress"></progress><span class="time">0:${String(elapsed).padStart(2, '0')} / 0:20</span></div>` : ''}<details class="event-details"><summary>${status === 'Next' || status === 'Waiting' ? 'View question' : 'View details'}</summary><div class="expanded"><p>${escape(r.question)}</p>${r.failed ? '<p class="failure-detail">The reply could not be played.</p>' : r.reply && status !== 'Next' && status !== 'Waiting' && phase !== 'preparing' ? `<blockquote>${escape(r.reply)}</blockquote>` : ''}</div></details>${isCurrent && phase === 'blocked' ? '<div class="inline-notice">Audio needs permission.<button data-action="enable">Enable audio</button></div>' : ''}${isCurrent && phase === 'preparing' ? '<button class="text-button" data-action="ready">Preview ready reply</button>' : ''}</article>`;
+function field(name: string, label: string, placeholder: string, type = 'text') {
+  return `<label class="field" for="${name}"><span>${label}</span><input id="${name}" name="${name}" type="${type}" value="${escape(draft[name] ?? '')}" placeholder="${placeholder}" autocomplete="off"></label>`;
 }
-function feed() {
-  const status = paused
-    ? 'Paused'
-    : phase === 'blocked'
-      ? 'Audio blocked'
-      : phase === 'preparing'
-        ? 'Preparing'
-        : 'Playing';
-  return `<section class="feed" aria-label="Request activity">${active ? row(active, status) : '<p class="idle-note">' + (paused ? 'Queue paused.' : 'Ready for questions.') + '</p>'}${waiting.map((r, i) => row(r, i === 0 ? 'Next' : 'Waiting', 'remove', i)).join('')}${history.length ? '<div class="history-divider">Recent activity</div>' : ''}${history.map((r, i) => row(r, r.failed ? 'Failed' : (r.outcome ?? 'Played'), !r.failed && !r.outcome ? 'replay' : undefined, i)).join('')}</section>`;
+function generation() {
+  return `<section class="setting-section" id="generation"><div class="section-heading"><h2>Generation</h2>${state(generationConfigured ? 'Configured' : 'Not configured', generationConfigured)}</div><p class="hint">Choose what writes the reply. Speech is configured separately.</p><label class="field" for="provider"><span>Provider</span><select id="provider" name="provider"><option value="openrouter" ${draft.provider === 'openrouter' ? 'selected' : ''}>OpenRouter</option><option value="codex" ${draft.provider === 'codex' ? 'selected' : ''}>Codex CLI</option></select></label>${draft.provider === 'openrouter' ? `<div class="field-grid">${field('model', 'Model ID', 'Enter an exact model ID')}${field('generationKey', generationConfigured ? 'Replace API key' : 'API key', generationConfigured ? 'Leave blank to keep configured key' : 'Placeholder key only', 'password')}</div><p class="hint">The initial connected trial requires verified free access. No model is selected for you.</p>` : '<p class="inline-note">Uses an existing supported CLI sign-in. Account authorization is a separate action.</p>'}<div class="actions">${button('save-generation', 'Save', 'class="primary"')}${button('check-generation', 'Check connection', generationConfigured ? '' : 'disabled')}${button('test-generation', 'Test response', generationConfigured ? '' : 'disabled')}</div></section>`;
 }
-function testPage() {
-  return `<section class="testing"><h1>Try a question.</h1><p>Questions join the stream queue. Keep stream controls open for audio in the finished app.</p><form id="test-form"><label for="viewer">Viewer name</label><input id="viewer" name="viewer" value="Streamer" maxlength="40" required><label for="question">Personality: question</label><textarea id="question" name="question" maxlength="1042" placeholder="Tyrone: What’s your advice for a first stream?" required></textarea><p class="input-help">Available personality: Tyrone</p><button type="submit">Send question</button></form><p>Preview only. No generation or speech service is called.</p></section>`;
+function speech() {
+  return `<section class="setting-section" id="speech"><div class="section-heading"><h2>Speech</h2>${state(speechConfigured ? 'Configured' : 'Not configured', speechConfigured)}</div><p class="hint">Turn replies into audio using each character’s assigned voice.</p><div class="field-grid"><label class="field" for="speech-provider"><span>Provider</span><select id="speech-provider"><option>Fish Audio</option></select></label>${field('speechKey', speechConfigured ? 'Replace API key' : 'API key', speechConfigured ? 'Leave blank to keep configured key' : 'Placeholder key only', 'password')}</div><div class="actions">${button('save-speech', 'Save', 'class="primary"')}${button('check-speech', 'Check connection', speechConfigured ? '' : 'disabled')}</div></section>`;
+}
+function characters() {
+  return `<section class="setting-section" id="characters"><div class="section-heading"><h2>Characters</h2><span class="subtle">1 profile</span></div><p class="hint">Viewers enter <strong>Name: question</strong>. Each character uses its assigned voice.</p><div class="profile"><span class="profile-mark">T</span><div><h3>Tyrone</h3><p class="hint">Existing development profile</p></div></div>${field('voice', 'Assigned voice ID', 'Placeholder voice ID only')}<div class="actions">${button('save-voice', 'Save', 'class="primary"')}${button('test-voice', 'Test voice', speechConfigured && voiceConfigured ? '' : 'disabled')}</div></section>`;
+}
+function playback() {
+  return `<section class="setting-section" id="playback"><h2>Playback</h2><p class="hint">Default volume when opening the app.</p><label class="field" for="playback-volume"><span>Volume (%)</span><input id="playback-volume" name="playback" type="number" min="0" max="100" value="${escape(draft.playback!)}"></label><div class="actions">${button('save-playback', 'Save', 'class="primary"')}</div></section>`;
+}
+function application() {
+  return `<section class="setting-section" id="app-settings"><h2>Application</h2><div class="application-row"><div><h3>Guided setup</h3><p class="hint">Walk through generation, speech, and Twitch.</p></div>${button('setup', 'Open setup')}</div><div class="application-row"><div><h3>Shut down</h3><p class="hint">Stop playback and close the local server.</p></div>${button('shutdown', 'Shut down app', 'class="danger"')}</div></section>`;
+}
+function connections() {
+  return `<div class="connections-layout"><section class="setting-section"><div class="section-heading"><h2>Twitch</h2>${state(connected ? 'Connected' : authorized ? 'Authorized' : 'Not connected', connected)}</div><p class="hint">Receive questions through one shared Channel Points reward.</p><div class="account-line"><span class="account-icon">${icon('connections', 24)}</span><div><h3>${authorized ? 'Sample channel' : 'Authorize your channel'}</h3><p class="hint">${authorized ? 'Example authorization for this mockup.' : 'Sign in through Twitch to authorize access.'}</p></div></div><div class="actions">${!authorized ? button('authorize', 'Authorize Twitch', 'class="primary"') : button('connect', connected ? 'Disconnect' : 'Connect', 'class="primary"')}${button('check-twitch', 'Check connection', authorized ? '' : 'disabled')}</div></section><section class="setting-section reward"><div class="section-heading"><h2>Channel Points reward</h2>${state(reward ? 'Ready' : 'Not set up', reward)}</div><p class="hint">Viewers choose a character with <strong>Name: question</strong>. Missing or unknown names are rejected and refunded.</p><div class="reward-example"><span class="character">Tyrone</span><span>Tyrone: Any advice for my first stream?</span></div><p class="hint">Reward title, cost, and cooldown are still to be decided. Connecting never creates a reward.</p><div class="actions">${button('reward', reward ? 'Check reward' : 'Set up reward', authorized ? '' : 'disabled')}</div></section></div>`;
+}
+function settings() {
+  const contents: Record<Section, () => string> = {
+    generation,
+    speech,
+    characters,
+    playback,
+    app: application,
+  };
+  return `<p class="settings-note">Save validates and stores settings. Changes take effect before the next request; waiting questions stay queued.${pendingSettings ? '<strong> Changes pending for the next request.</strong>' : ''}</p><div class="settings-layout"><nav class="settings-index" aria-label="Settings sections">${sections.map((s) => `<a href="#${s === 'app' ? 'app-settings' : s}">${labels[s]}</a>`).join('')}</nav><div class="settings-content">${sections.map((s) => contents[s]()).join('')}</div></div>`;
+}
+const setupLabels = ['Generation', 'Speech & voice', 'Twitch'];
+function setup() {
+  return `<div class="setup"><div class="setup-heading"><div><h1>Set up your stream</h1><p class="hint">Configure once. Come back here whenever you need.</p></div>${button('leave-setup', 'Exit setup')}</div><ol class="setup-steps">${setupLabels.map((label, i) => `<li>${button(`step-${i}`, `<span>${i + 1}</span>${label}`, `aria-current="${setupStep === i ? 'step' : 'false'}"`)}</li>`).join('')}</ol><div class="setup-content">${setupStep === 0 ? generation() : setupStep === 1 ? speech() + characters() : connections()}</div><footer class="setup-footer">${button('setup-back', 'Back', setupStep === 0 ? 'disabled' : '')}<span>Step ${(setupStep ?? 0) + 1} of 3</span>${button('setup-next', setupStep === 2 ? 'Go to Activity' : 'Continue', 'class="primary"')}</footer></div>`;
 }
 function render() {
-  document
-    .querySelectorAll<HTMLButtonElement>('[data-state]')
-    .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.state === scenario)));
-  app.innerHTML = `<main class="shell">${header()}${testing ? '<button class="text-button" data-action="testing">Back to activity</button>' + testPage() : transport() + toolbar() + feed() + `<div class="secondary-controls"><button class="text-button" data-action="clear" ${waiting.length ? '' : 'disabled'}>Clear waiting</button><button class="text-button danger" data-action="stop" ${active || waiting.length ? '' : 'disabled'}>Stop and clear</button></div><footer class="app-footer"><span>Audio in this tab</span><label class="simulate"><input id="simulate" type="checkbox" ${simulatedTime ? 'checked' : ''}> Simulate playback</label><button class="text-button" data-action="quit">Quit app</button></footer>`}</main>`;
+  const expanded = new Set(
+    [...app.querySelectorAll<HTMLDetailsElement>('details[open]')].map(
+      (d) => d.dataset.requestId ?? d.id,
+    ),
+  );
+  const content = stopped
+    ? `<div class="empty shutdown-preview"><h1>App shut down</h1><p>This is a preview of the shutdown screen. The mockup server is still running.</p>${button('reopen', 'Return to mockup')}</div>`
+    : setupStep !== undefined
+      ? setup()
+      : `<header class="page-heading"><h1>${labels[page]}</h1>${page === 'activity' ? button('page-connections', state(connected ? 'Twitch connected' : 'Twitch disconnected', connected), 'class="status-link"') : ''}</header>${page === 'activity' ? activity() : page === 'connections' ? connections() : settings()}`;
+  const brand = `<div class="brand"><span class="brand-symbol" aria-hidden="true">${icon('activity', 25)}</span><span>Stream controls</span></div>`;
+  app.innerHTML = `<div class="sidebar-shell"><aside class="sidebar">${brand}${navigation()}<div class="sidebar-footer"><span class="dot"></span>Local app</div></aside><main class="workspace">${content}</main></div>`;
+  app.querySelectorAll<HTMLDetailsElement>('details').forEach((d) => {
+    d.open = expanded.has(d.dataset.requestId ?? d.id);
+  });
 }
 function advance() {
-  active = waiting.shift();
-  elapsed = 0;
-  phase = 'playing';
+  current = paused ? undefined : waiting.shift();
+  if (current) pendingSettings = false;
 }
-app.addEventListener('click', (event) => {
-  const button = (event.target as Element).closest<HTMLButtonElement>('[data-action]');
-  if (!button || button.disabled) return;
-  switch (button.dataset.action) {
-    case 'pause':
-      paused = !paused;
-      if (!paused && !active && waiting.length) advance();
-      notify(paused ? 'Queue paused.' : 'Queue resumed.');
-      break;
-    case 'skip':
-      if (active) history.unshift({ ...active, outcome: 'Skipped' });
-      advance();
-      notify('Current reply skipped.');
-      break;
-    case 'stop':
-      active = undefined;
-      waiting = [];
-      paused = true;
-      notify('Stopped and cleared. Queue paused.');
-      break;
-    case 'clear':
-      waiting = [];
-      notify('Waiting questions cleared.');
-      break;
-    case 'remove': {
-      const removed = waiting.splice(Number(button.dataset.index), 1)[0];
-      if (removed) history.unshift({ ...removed, outcome: 'Removed' });
-      notify('Question removed.');
-      break;
+function finish(outcome: string) {
+  if (current) history.unshift({ ...current, response: undefined, outcome });
+  history = history.slice(0, 8);
+  advance();
+}
+function save(kind: string) {
+  if (kind === 'generation') {
+    if (
+      draft.provider === 'openrouter' &&
+      (!draft.model!.trim() || (!generationConfigured && !draft.generationKey!.trim()))
+    ) {
+      notify('Enter a model ID and placeholder API key before saving.');
+      return false;
     }
-    case 'mute':
-      muted = !muted;
-      break;
-    case 'testing':
-      testing = !testing;
-      break;
-    case 'connect':
-      connected = !connected;
-      notify('Preview connection updated.');
-      break;
-    case 'ready':
-    case 'enable':
-      phase = 'playing';
-      break;
-    case 'replay': {
-      const request = { ...history[Number(button.dataset.index)]! };
-      if (!active && !paused) active = request;
-      else waiting.push(request);
-      elapsed = active === request ? 0 : elapsed;
-      notify('Cached reply queued for replay.');
-      break;
+    generationConfigured = true;
+    draft.generationKey = '';
+  } else if (kind === 'speech') {
+    if (!speechConfigured && !draft.speechKey!.trim()) {
+      notify('Enter a placeholder speech key before saving.');
+      return false;
     }
-    case 'quit':
-      active = undefined;
-      waiting = [];
-      paused = true;
-      notify('Preview stopped. The actual app is still running.');
-      break;
+    speechConfigured = true;
+    draft.speechKey = '';
+  } else if (kind === 'voice') {
+    if (!draft.voice!.trim()) {
+      notify('Enter a placeholder voice ID before saving.');
+      return false;
+    }
+    voiceConfigured = true;
+  } else if (kind === 'playback') {
+    const value = Number(draft.playback);
+    if (!draft.playback!.trim() || !Number.isFinite(value) || value < 0 || value > 100) {
+      notify('Volume must be between 0 and 100.');
+      return false;
+    }
   }
-  const action = button.dataset.action;
+  pendingSettings = !!current;
+  notify(
+    `Saved in mockup memory only.${current ? ' Current request keeps its original settings; changes apply before the next request.' : ''}`,
+  );
+  return true;
+}
+document.addEventListener('click', (event) => {
+  const target = event.target as Element;
+  const control = target.closest<HTMLButtonElement>('button[data-action]');
+  if (!control || control.disabled) {
+    app.querySelectorAll<HTMLDetailsElement>('.menu[open]').forEach((menu) => {
+      if (!menu.contains(target)) menu.open = false;
+    });
+    return;
+  }
+  const action = control.dataset.action!;
+  if (action.startsWith('page-')) {
+    page = action.slice(5) as Page;
+    setupStep = undefined;
+  } else if (action.startsWith('step-')) setupStep = Number(action.slice(5));
+  else if (action.startsWith('save-')) {
+    if (!save(action.slice(5))) return;
+  } else if (action.startsWith('check-'))
+    notify('Simulated connection check passed. No network request was made.');
+  else if (action.startsWith('test-'))
+    notify(
+      action === 'test-voice'
+        ? 'Voice test preview only. No speech request or audio playback.'
+        : 'Sample response: Take a short break, then come back with one thing to improve. No generation request was made.',
+    );
+  else
+    switch (action) {
+      case 'pause':
+        paused = !paused;
+        if (!paused && !current) advance();
+        break;
+      case 'mute':
+        muted = !muted;
+        break;
+      case 'skip':
+        finish('Skipped');
+        notify('Sample request skipped.');
+        break;
+      case 'remove': {
+        const request = waiting.find((r) => r.id === control.dataset.id);
+        waiting = waiting.filter((r) => r.id !== control.dataset.id);
+        if (request) history.unshift({ ...request, response: undefined, outcome: 'Removed' });
+        history = history.slice(0, 8);
+        break;
+      }
+      case 'clear':
+        waiting = [];
+        break;
+      case 'stop':
+        current = undefined;
+        waiting = [];
+        paused = true;
+        pendingSettings = false;
+        break;
+      case 'authorize':
+        authorized = true;
+        notify('Sample channel authorized. No Twitch sign-in was opened.');
+        break;
+      case 'connect':
+        connected = !connected;
+        notify('Sample connection changed. Reward setup remains separate.');
+        break;
+      case 'reward':
+        reward = true;
+        notify('Sample reward is ready. No Twitch reward was created.');
+        break;
+      case 'setup':
+        setupStep = 0;
+        break;
+      case 'leave-setup':
+        setupStep = undefined;
+        page = 'settings';
+        notify('Setup closed. Only explicitly saved mockup settings are configured.');
+        break;
+      case 'setup-back':
+        setupStep = Math.max(0, (setupStep ?? 0) - 1);
+        break;
+      case 'setup-next':
+        if (setupStep === 2) {
+          setupStep = undefined;
+          page = 'activity';
+        } else setupStep = (setupStep ?? 0) + 1;
+        break;
+      case 'shutdown':
+        stopped = true;
+        break;
+      case 'reopen':
+        stopped = false;
+        break;
+    }
   render();
-  app.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)?.focus({ preventScroll: true });
+  const focus =
+    app.querySelector<HTMLElement>(`[data-action="${action}"]`) ??
+    app.querySelector<HTMLElement>('h1');
+  if (focus?.tagName === 'H1') focus.setAttribute('tabindex', '-1');
+  focus?.focus({ preventScroll: true });
 });
 app.addEventListener('input', (event) => {
   const input = event.target as HTMLInputElement;
   if (input.id === 'volume') {
     volume = Number(input.value);
     app.querySelector('output')!.textContent = `${volume}%`;
+  } else if (input.name) {
+    draft[input.name] = input.value;
+    if (input.name === 'voice') voiceConfigured = false;
   }
 });
 app.addEventListener('change', (event) => {
-  if ((event.target as HTMLInputElement).id === 'simulate')
-    simulatedTime = (event.target as HTMLInputElement).checked;
+  const input = event.target as HTMLSelectElement;
+  if (input.id === 'provider') {
+    draft.provider = input.value;
+    generationConfigured = false;
+    draft.generationKey = '';
+    render();
+    app.querySelector<HTMLElement>('#provider')?.focus();
+  }
 });
-app.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const form = event.target as HTMLFormElement;
-  const data = new FormData(form);
-  const text = String(data.get('question')).trim();
-  const split = text.indexOf(':');
-  if (
-    split < 0 ||
-    text.slice(0, split).trim().toLowerCase() !== 'tyrone' ||
-    !text.slice(split + 1).trim()
-  ) {
-    notify('Use Tyrone: followed by your question.');
-    return;
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    const menu = app.querySelector<HTMLDetailsElement>('.menu[open]');
+    if (menu) {
+      menu.open = false;
+      menu.querySelector<HTMLElement>('summary')?.focus();
+    }
   }
-  if (text.slice(split + 1).trim().length > 1000) {
-    notify('Keep the question under 1,000 characters.');
-    return;
-  }
-  const viewer = String(data.get('viewer')).trim();
-  if (!viewer) {
-    notify('Enter a viewer name.');
-    return;
-  }
-  if (waiting.length >= 2) {
-    notify('Queue full. Remove a waiting question or skip the current reply.');
-    return;
-  }
-  if ([active, ...waiting].some((r) => r?.viewer.toLowerCase() === viewer.toLowerCase())) {
-    notify('This viewer already has a question in the queue.');
-    return;
-  }
-  const request = {
-    viewer,
-    question: text.slice(split + 1).trim(),
-    reply:
-      'This is a simulated reply. In the finished app, the selected character’s generated reply will appear here and play aloud.',
-  };
-  if (!active && !paused) {
-    active = request;
-    elapsed = 0;
-    phase = 'playing';
-  } else waiting.push(request);
-  form.reset();
-  notify('Question added to the preview queue.');
 });
-document.querySelector('#reset')!.addEventListener('click', reset);
-document.querySelector('.preview-caption')!.addEventListener('click', (event) => {
-  const b = (event.target as Element).closest<HTMLButtonElement>('[data-state]');
-  if (!b) return;
-  const selected = b.dataset.state!;
-  reset();
-  scenario = selected;
-  phase = selected;
-  if (selected === 'failed' && active)
-    history.unshift({ ...active, failed: true, reply: 'The reply could not be played.' });
-  if (selected === 'empty' || selected === 'failed') {
-    active = undefined;
-    waiting = [];
-  }
-  render();
-});
-setInterval(() => {
-  if (!simulatedTime || paused || !active || phase !== 'playing') return;
-  elapsed++;
-  if (elapsed >= 20) {
-    history.unshift(active);
-    history = history.slice(0, 8);
-    advance();
-    if (!testing) render();
-  } else if (!testing) {
-    const progress = app.querySelector<HTMLProgressElement>('progress');
-    if (progress) progress.value = elapsed;
-    const time = app.querySelector('.time');
-    if (time) time.textContent = `0:${String(elapsed).padStart(2, '0')} / 0:20`;
-  }
-}, 1000);
-reset();
+render();

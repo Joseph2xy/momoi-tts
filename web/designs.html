@@ -3,23 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Activity-feed preview</title>
+    <title>Stream controls · Browser mockup</title>
     <link rel="stylesheet" href="./designs.css" />
     <script type="module" src="./designs.ts"></script>
   </head>
   <body>
-    <header class="preview-header">
-      <a class="preview-title" href="./designs.html">Activity preview</a>
-
-      <span>Interactive preview · simulated data</span>
-    </header>
-    <div class="preview-caption">
-      <p>Preview states</p>
-      <button data-state="playing">Playing</button><button data-state="preparing">Preparing</button
-      ><button data-state="empty">Empty</button><button data-state="blocked">Audio blocked</button
-      ><button data-state="failed">Failed</button><button id="reset">Reset demo</button>
+    <div class="preview-notice">
+      Browser mockup · Sample data only. Use placeholder keys; nothing is saved or sent.
     </div>
     <div id="app"></div>
-    <p class="feedback" id="feedback" role="status" aria-live="polite"></p>
+    <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
   </body>
 </html>

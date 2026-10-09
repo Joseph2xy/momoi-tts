@@ -118,22 +118,13 @@ h3 {
   font-size: 12px;
   margin: 0;
 }
-.response-content {
-  margin-top: 22px;
-  padding: 16px;
-  background: #141923;
-  border: 1px solid #303b50;
-  border-radius: 6px;
-}
 .request-question {
   color: #d4dcec;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 1.65;
-}
-.response-content .request-question {
   font-size: 13px;
-  margin: 0;
+  margin: 9px 0;
 }
 blockquote {
   margin: 14px 0 0;
@@ -287,10 +278,6 @@ progress {
 }
 .request .pill {
   margin-left: auto;
-}
-.request-question {
-  margin: 9px 0;
-  font-size: 13px;
 }
 .request-reply {
   margin: 8px 0;

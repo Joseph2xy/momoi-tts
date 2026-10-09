@@ -41,7 +41,7 @@ export function findCodex(): string {
   return executable;
 }
 
-export const testedVersion = 'codex-cli 0.160.1';
+export const testedVersion = 'codex-cli 0.162.0';
 export function assertTestedVersion(executable: string): void {
   const version = execFileSync(executable, ['--version'], {
     encoding: 'utf8',

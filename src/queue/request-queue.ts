@@ -17,7 +17,6 @@ interface Job {
   entry: RequestEntry;
   character: CharacterProfile;
   controller: AbortController;
-  audio?: Buffer;
   pausedAt?: number;
   pausedMs?: number;
 }
@@ -31,7 +30,6 @@ export class RequestQueue {
   #active: Job | null = null;
   #waiting: Job[] = [];
   #history: RequestEntry[] = [];
-  #cache = new Map<string, Buffer>();
   #events = new Map<string, { id: string; at: number }>();
   #viewers = new Map<string, number>();
   #lastAccepted = -Infinity;
@@ -61,10 +59,7 @@ export class RequestQueue {
       paused: this.#paused,
       activeId: this.#active?.entry.id ?? null,
       waitingIds: this.#waiting.map((job) => job.entry.id),
-      requests: this.#history.map((entry) => ({
-        ...entry,
-        replayAvailable: entry.status === 'completed' && this.#cache.has(entry.id),
-      })),
+      requests: this.#history.map((entry) => ({ ...entry })),
       ...this.#settings,
     };
   }
@@ -128,33 +123,6 @@ export class RequestQueue {
     });
     return entry.id;
   }
-  replay(id: unknown): string {
-    if (typeof id !== 'string') throw new RequestInputError('Choose a completed response.');
-    this.tick();
-    const old = this.#history.find((entry) => entry.id === id && entry.status === 'completed');
-    const audio = this.#cache.get(id);
-    if (!old || !audio) throw new RequestInputError('Replay audio is no longer cached.');
-    this.#checkCapacity();
-    const entry: RequestEntry = {
-      id: randomUUID(),
-      viewer: old.viewer,
-      question: old.question,
-      dialogue: old.dialogue,
-      characterId: old.characterId,
-      characterName: old.characterName,
-      replayOf: old.id,
-      status: 'waiting',
-      createdAt: this.#now(),
-    };
-    // Cached replay uses no providers; its original character and audio stay intact.
-    this.#enqueue({
-      entry,
-      character: { id: old.characterId, name: old.characterName, prompt: '' },
-      controller: new AbortController(),
-      audio,
-    });
-    return entry.id;
-  }
   pause(): void {
     this.#paused = true;
   }
@@ -207,10 +175,6 @@ export class RequestQueue {
     if (event === 'playing') job.entry.status = 'playing';
     else if (event === 'blocked') job.entry.status = 'blocked';
     else {
-      if (event === 'ended' && job.audio) {
-        this.#cache.set(id, job.audio);
-        while (this.#cache.size > 5) this.#cache.delete(this.#cache.keys().next().value!);
-      }
       this.#finish(
         job.entry,
         event === 'ended' ? 'completed' : 'failed',
@@ -241,11 +205,10 @@ export class RequestQueue {
       this.#cancelActive('failed', 'Request timed out.');
     this.#pump();
   }
-  #checkCapacity(viewer?: string): void {
+  #checkCapacity(viewer: string): void {
     if (
-      viewer &&
       [this.#active, ...this.#waiting].some(
-        (job) => !job?.entry.replayOf && job?.entry.viewer.toLowerCase() === viewer.toLowerCase(),
+        (job) => job?.entry.viewer.toLowerCase() === viewer.toLowerCase(),
       )
     )
       throw new RequestInputError('This viewer already has an outstanding request.');
@@ -265,8 +228,7 @@ export class RequestQueue {
           ),
       );
       if (index === -1) break;
-      const [removed] = this.#history.splice(index, 1);
-      if (removed) this.#cache.delete(removed.id);
+      this.#history.splice(index, 1);
     }
     this.#pump();
   }
@@ -308,35 +270,27 @@ export class RequestQueue {
   }
   async #run(job: Job): Promise<void> {
     try {
-      if (!job.audio) {
-        job.entry.status = 'generating';
-        const dialogue = await this.#phase(job, (signal) =>
-          this.#deps.pipeline!.generate(job.entry.question, signal, job.character),
-        );
-        if (!this.#current(job)) return;
-        if (typeof dialogue !== 'string' || !dialogue.trim() || Buffer.byteLength(dialogue) > 4000)
-          throw new Error('Invalid dialogue.');
-        job.entry.dialogue = dialogue;
-        job.entry.status = 'synthesizing';
-        const audio = await this.#phase(job, (signal) =>
-          this.#deps.pipeline!.synthesize(dialogue, signal, job.character),
-        );
-        if (!this.#current(job)) return;
-        job.audio = audio;
-      }
+      job.entry.status = 'generating';
+      const dialogue = await this.#phase(job, (signal) =>
+        this.#deps.pipeline!.generate(job.entry.question, signal, job.character),
+      );
       if (!this.#current(job)) return;
-      if (!Buffer.isBuffer(job.audio) || !job.audio.length || job.audio.length > 5_000_000)
+      if (typeof dialogue !== 'string' || !dialogue.trim() || Buffer.byteLength(dialogue) > 4000)
+        throw new Error('Invalid dialogue.');
+      job.entry.dialogue = dialogue;
+      job.entry.status = 'synthesizing';
+      const audio = await this.#phase(job, (signal) =>
+        this.#deps.pipeline!.synthesize(dialogue, signal, job.character),
+      );
+      if (!this.#current(job)) return;
+      if (!Buffer.isBuffer(audio) || !audio.length || audio.length > 5_000_000)
         throw new Error('Invalid audio.');
       if (!this.#deps.playerReady()) {
         this.disconnect();
         return;
       }
       job.entry.status = 'ready';
-      this.#deps.play(
-        job.entry.id,
-        job.audio,
-        `${job.entry.characterName} · ${job.entry.viewer}${job.entry.replayOf ? ' · replay' : ''}`,
-      );
+      this.#deps.play(job.entry.id, audio, `${job.entry.characterName} · ${job.entry.viewer}`);
     } catch {
       if (!this.#current(job)) return;
       const message =
