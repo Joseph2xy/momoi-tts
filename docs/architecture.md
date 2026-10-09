@@ -15,10 +15,9 @@ One local Node/TypeScript application serves browser management and a separate t
 | `src/server/` | HTTP validation, loopback/same-origin restrictions, audio/static delivery |
 | `src/shared/` | Safe browser/server contracts and input errors |
 | `web/management/` | Management entrypoint, navigation, settings drafts, activity feed and playback controls |
-| `web/management/prototype/`, `web/prototype.html` | Throwaway message-feed design review on `prototype/activity-layouts`, with synthetic state and no backend access |
 | `web/testing/` | Independent testing-page entrypoint |
 | `web/playback/` | Audio ownership and playback lifecycle |
-| `web/shared/`, `web/styles/` | Browser DOM helpers and shared app stylesheet |
+| `web/shared/` | Browser DOM helpers |
 | `web/index.html`, `web/testing.html` | Vite page entrypoints, served at / and /testing |
 | `config/examples/` | Public provider/Twitch templates |
 | `scripts/launch/`, `scripts/windows/` | Bounded start/reuse/restart helpers and prerequisite bootstrap |
@@ -36,7 +35,9 @@ One local Node/TypeScript application serves browser management and a separate t
 
 `src/app/runtime.ts` owns the playback session, queue, management operations and expiry. `app/server.ts` binds runtime to HTTP and disposes it when closed. The HTTP layer validates commands and delegates; it constructs no providers or queue. Routes accept fixed settings sections/actions, never arbitrary commands or paths. `src/app/provider-actions.ts` composes configured pipelines and runs explicit response/voice tests and account checks from settings snapshots. The settings store owns validation, persistence, profiles and safe public metadata; it makes no network requests. Account checks use read-only provider endpoints and redact responses; Codex has one local prerequisite check establishing only executable/version availability.
 
-The testing page contains full-request, response-only and fixed-phrase voice tests and never owns audio. Settings links to the relevant mode. Both pages share `web/styles/app.css`. `web/management/main.ts` coordinates commands, state polling and application actions; `settings.ts` owns form drafts/saves, `activity.ts` owns request rows, `controls.ts` binds playback controls and `navigation.ts` switches persistent sections. Browser management uses persistent page sections. Navigation does not dispose playback or drafts. Per-section saves/Discard, beforeunload warnings, and pending settings are separate from explicit checks/tests. Application houses checklist, diagnostics, profile refresh, testing entrypoint, restart and shutdown. Windows setup provides Node/dependency bootstrap.
+The testing page contains full-request, response-only and fixed-phrase voice tests and never owns audio. Settings links to the relevant mode. `web/management/style.css` owns the charcoal/coral theme, local Outfit font, Activity layout and management forms; `web/testing/style.css` adapts it for the independent testing page.
+
+`web/management/main.ts` coordinates the persistent React Activity root, settings controller and application actions. `activity.tsx` renders server-backed controls and current/upcoming/history entries; only history scrolls, and history has no actions. `server-state.ts` uses TanStack Query's core observer to poll only public state. Commands are serialized, uncached and never retried; they cancel outstanding GETs before writing, and departure aborts requests. Secret replacements never enter a mutation cache. `settings.ts` retains persistent DOM forms and draft/save race handling; `navigation.ts` switches sections without disposing playback or drafts. Per-section saves/Discard, beforeunload warnings, and pending settings are separate from explicit checks/tests. Application houses checklist, diagnostics, profile refresh, testing entrypoint, restart and shutdown. Windows setup provides Node/dependency bootstrap.
 
 ## Request and playback boundaries
 

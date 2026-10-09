@@ -44,7 +44,7 @@ Speech currently uses Fish `s2.1-pro-free`. Verify access, allowance and commerc
 
 `characters/catalog.json` contains trusted profiles and `characters/prompts/` their instructions. Each entry has a unique `id`, display `name` (up to 40 characters, no colon), relative `promptFile`, and `voiceIdEnv` naming a private 32-character Fish voice setting. Add profiles/prompts in files, click **Refresh file-based profiles** in Application, then assign their voices. No browser character Add/Edit interface is required initially. Demo ignores voice credentials.
 
-Input is `Name: question`; names are case-insensitive, with no default character. Questions after the first colon may contain colons and are bounded to 1,000 characters. Browser state exposes IDs/names, never prompts or voice IDs. Current/waiting/past rows show each question once, with response-only expansion. History is read-only, with no replay.
+Input is `Name: question`; names are case-insensitive, with no default character. Questions after the first colon may contain colons and are bounded to 1,000 characters. Browser state exposes IDs/names, never prompts or voice IDs. Activity emphasizes questions, with replies secondary. Current and upcoming previews stay stationary; only history scrolls, showing complete questions/replies with the latest outcomes first. Short windows compact previews to retain space for history. History is read-only, with no replay.
 
 | Control | Behavior |
 | --- | --- |
@@ -64,15 +64,11 @@ The retained intake uses one shared `Name: question` reward, completion fulfillm
 
 ## Development
 
-On branch `prototype/activity-layouts`, run `npm run prototype:ui` and open
-[message feed preview](http://127.0.0.1:3222/prototype.html). The review refines the
-preferred transcript-feed direction with questions first, stationary current/upcoming
-work, and a separately scrolling history list. Current/upcoming text uses bounded
-previews; history shows full questions and replies inline. Skip, pause, mute and removal
-are simulated in memory; reloading restores the samples. Settings
-and actual playback are outside this review. No backend server, credentials or provider
-access is needed. The prototype page is excluded from the production Vite build.
-`npm run prototype:check` checks its React TypeScript code. Stop the review with Ctrl+C.
+The production Activity screen uses React, Tailwind and editable shadcn components.
+TanStack Query polls public server state; commands are serialized and never retried
+automatically. Settings retains its persistent forms and draft handling. Both browser
+pages use the charcoal/coral theme and locally bundled Outfit font. Use `npm run demo`
+for synthetic generation/audio without provider or Twitch calls.
 
 ```powershell
 npm run build
@@ -81,7 +77,7 @@ npm run check:tools
 npm run format:check
 ```
 
-`build` runs strict server/browser TypeScript and Vite. `test:offline` runs eleven service-independent test files. `check:tools` probes the guarded installed Codex CLI against a fake loopback provider. `npm test` runs all twelve files. Candidate checks use `npm run check:tools -- --candidate-version=X.Y.Z`; passing does not approve changing the guard. No test command authorizes live allowance. [Verification](docs/verification.md) owns evidence and limitations.
+`build` runs strict server/browser TypeScript and Vite. `test:offline` runs twelve service-independent test files. `check:tools` probes the guarded installed Codex CLI against a fake loopback provider. `npm test` runs all thirteen files. Candidate checks use `npm run check:tools -- --candidate-version=X.Y.Z`; passing does not approve changing the guard. No test command authorizes live allowance. [Verification](docs/verification.md) owns evidence and limitations.
 
 `npm run format` uses pinned development-only Prettier. For development, run `npm run dev:browser` and `npm run dev:server` separately, wait for the browser build, then refresh after changes. Server restarts reset queued work.
 

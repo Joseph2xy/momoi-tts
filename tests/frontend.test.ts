@@ -36,7 +36,22 @@ try {
     );
     assert(assets.some((asset) => asset.endsWith('.js')));
     assert(assets.some((asset) => asset.endsWith('.css')));
-    for (const asset of assets) assert.equal((await fetch(`${base}${asset}`)).status, 200);
+    for (const asset of assets) {
+      const response = await fetch(`${base}${asset}`);
+      assert.equal(response.status, 200);
+      if (asset.endsWith('.css')) {
+        const css = await response.text();
+        const fonts = [...css.matchAll(/(?:\/assets\/)?([a-zA-Z0-9_-]+\.woff2)/gu)].map(
+          (match) => match[1]!,
+        );
+        assert(fonts.length > 0, 'Self-hosted fonts must be included in the stylesheet');
+        for (const font of new Set(fonts)) {
+          const fontResponse = await fetch(`${base}/assets/${font}`);
+          assert.equal(fontResponse.status, 200);
+          assert.equal(fontResponse.headers.get('Content-Type'), 'font/woff2');
+        }
+      }
+    }
   }
   for (const privatePath of [
     '/player',

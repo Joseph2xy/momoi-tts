@@ -11,19 +11,10 @@
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "paths": {
-      "@/*": [
-        "./web/management/prototype/*"
-      ]
+      "@/*": ["./web/management/*"]
     }
   },
-  "include": [
-    "src/**/*.ts",
-    "scripts/**/*.ts",
-    "tests/**/*.ts",
-    "vite.config.ts"
-  ]
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "vite.config.ts"]
 }

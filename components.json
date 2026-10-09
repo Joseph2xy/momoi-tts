@@ -5,7 +5,7 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "web/management/prototype/style.css",
+    "css": "web/management/style.css",
     "baseColor": "neutral",
     "cssVariables": true
   },

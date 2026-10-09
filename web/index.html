@@ -3,61 +3,30 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#171e29" />
+    <meta name="theme-color" content="#202025" />
     <title>Stream controls</title>
-    <link rel="stylesheet" href="./styles/app.css" />
     <script type="module" src="./management/main.ts"></script>
   </head>
   <body>
-    <div class="sidebar-shell">
-      <aside class="sidebar">
-        <div class="brand">Stream controls</div>
+    <div class="app-shell">
+      <header class="app-navigation">
         <nav class="navigation" aria-label="Main navigation">
           <button data-page="activity">Activity</button
           ><button data-page="connections">Connections</button
           ><button data-page="settings">Settings</button>
         </nav>
-        <div class="sidebar-footer">Local app</div>
-      </aside>
+        <span id="connection" class="subtle">Connecting</span>
+      </header>
       <main class="workspace">
-        <div class="page-heading">
+        <div id="page-heading" class="page-heading">
           <h1 id="heading">Activity</h1>
-          <span id="connection" class="subtle">Connecting</span>
         </div>
         <p id="message" class="error" role="alert"></p>
         <p id="playback-note" class="hint" role="status"></p>
         <button id="enable" hidden>Enable audio</button>
+        <p id="readiness" class="hint"></p>
         <section id="activity-page" data-view="activity">
-          <p id="mode" class="hint"></p>
-          <p id="readiness" class="hint"></p>
-          <div class="transport">
-            <div class="transport-main">
-              <button id="pause" class="primary" disabled>Resume</button
-              ><button id="skip" disabled>Skip current</button
-              ><button id="mute" disabled>Mute</button>
-            </div>
-            <details class="menu" id="options">
-              <summary>Options</summary>
-              <div class="menu-panel">
-                <label class="volume" for="volume"
-                  >Volume <output id="volume-value">100%</output></label
-                ><input id="volume" type="range" min="0" max="100" value="100" /><button id="clear">
-                  Clear waiting</button
-                ><button id="stop-clear" class="danger">Stop and clear</button>
-              </div>
-            </details>
-          </div>
-          <div id="playback-progress" hidden>
-            <progress
-              id="progress"
-              aria-label="Speech playback progress"
-              max="1"
-              value="0"
-            ></progress
-            ><span id="progress-time"></span>
-          </div>
-          <p id="detail" class="hint" role="status"></p>
-          <div id="feed" class="feed"></div>
+          <div id="activity-root"></div>
         </section>
         <section data-view="connections" hidden>
           <h2>Twitch</h2>
@@ -183,6 +152,7 @@
           </form>
           <section class="setting-section" id="application">
             <h2>Application</h2>
+            <p id="mode" class="hint"></p>
             <div class="actions">
               <button type="button" data-action="setup">Open setup checklist</button
               ><a href="/testing" target="_blank" rel="noopener">Open local testing</a

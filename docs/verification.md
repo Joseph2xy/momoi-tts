@@ -4,7 +4,7 @@ Evidence recorded through 2026-10-09. Recorded results do not mean every check r
 
 ## Offline coverage
 
-The final organizational review on 2026-10-09 passed the build, strict server/browser TypeScript, all twelve test files, formatting, whitespace, and PowerShell syntax checks. Source references and local document links were checked; the moved stylesheet is unchanged. Eleven test files are service-independent; the installed Codex probe uses a fake loopback provider. Tests use synthetic dialogue/audio, dummy credentials, and mocks without live allowance.
+The message-screen integration on 2026-10-09 passed the production build, strict server/browser TypeScript, formatting, whitespace, twelve service-independent test files and the installed Codex probe using a fake loopback provider. Tests use synthetic dialogue/audio, dummy credentials, and mocks without live allowance.
 
 | Area | Checked behavior |
 | --- | --- |
@@ -36,34 +36,37 @@ Same-browser script-free copies of the current DOM/stylesheet had no horizontal 
 
 The organizational-pass review also loaded both built pages in the T3 collaborative browser against isolated demo settings. DOM inspection and interactions verified the first-use checklist, navigation, draft retention across views, Discard, saved playback defaults, and a synthetic response-only test. Testing had no audio element. Snapshot capture failed; this review adds no screenshot or responsive-layout evidence. The review server and disposable settings were removed afterward.
 
-## Activity layout prototype evidence
+## Message-screen integration
 
-On 2026-10-09, branch `prototype/activity-layouts` passed the existing production build
-and strict server/browser TypeScript, plus `prototype:check`, formatting, and whitespace
-checks for the refined React prototype. The production build includes only its existing
-management and testing pages.
+The accepted question-first screen is integrated into the production Vite build on
+branch feat/message-screen. Fresh checks on 2026-10-09 passed strict server/browser
+TypeScript, the twelve offline test files, and the installed Codex dialogue-only probe
+against a fake loopback provider. State-controller tests verify cancellation of stale
+GETs, serialized commands, no automatic POST retries, offline gating, departure
+aborts, and transport-error redaction. Frontend tests fetch bundled WOFF2 fonts and
+verify their MIME type as well as existing private-path exclusion.
 
-T3 browser DOM-dispatched clicks for the question-first revision verified pause,
-skip advancing the sample queue while preserving pause, waiting-response exclusion,
-waiting removal and its updated history outcome, mute, exhausted-queue feedback,
-and disabled skip without a current message. Reload restored the samples. Browser
-inspection confirmed the preview banner is absent, headings use white 16–17px type,
-and there is no audio element, nested button, or `/api/` resource request. These are
-synthetic interactions, not live queue evidence. Pointer-click automation returned
-success without changing state, so it does not establish pointer interaction coverage.
+T3 review used an isolated demo server, disposable settings, synthetic dialogue/audio,
+and zero review-only cooldowns. DOM-dispatched interactions verified the setup
+checklist, persistent settings drafts across navigation, Discard, durable playback
+default saving, secret replacement clearing without public-state disclosure, paused
+waiting removal, skip preserving pause, mute, volume reaching server state, and
+stop-and-clear. Navigation retained the same held audio element. A secondary Activity
+tab owned no audio, and Testing remained silent. Viewer input containing HTML appeared
+as literal text with no injected element; history exposed no buttons.
 
-DOM scrolling moved history while page scroll remained zero and the current panel
-and history heading stayed stationary. Script-free DOM/stylesheet copies at
-1280x800, 600x700, 390x844, and 320x568 had no page overflow and exactly one scrollable
-region: the history list. Long synthetic questions kept that region within the viewport
-with positive height. Current/upcoming previews are bounded; history text is complete.
-These copies provide limited layout evidence, not mobile interaction coverage. Direct
-resizing remains unverified. Snapshot capture failed for this revision, so it has no
-fresh screenshot-based visual verification.
+DOM scrolling moved history while page scroll stayed zero and current work stayed
+stationary. Script-free copies of the production DOM/styles at 1280x800, 600x700,
+390x844, and 320x568 had no page overflow and only one visible scrollable region:
+history. With one current and two waiting questions expanded to long synthetic text,
+history remained within the viewport with positive height. These are limited layout
+checks, not mobile pointer interaction evidence. Current/upcoming text uses bounded
+previews; history text is complete. Direct resizing remains unverified. Snapshot
+capture failed, so this revision has no fresh screenshot-based visual verification.
 
 ## Packaging evidence
 
-The transfer package passed a fresh check during the organizational pass: the new browser folders and backend provider-actions module are included; superseded browser paths, private state, dependencies and generated output are excluded. The public-file allowlist continues to include the five project documents. The temporary verification ZIP was deleted. Fresh destination-PC installation and actual prerequisite installation/sign-in were not exercised.
+The transfer package passed a fresh integration check: production React TSX files, public-state Query integration, component configuration, and the current browser folders are included. Prototype paths, private state, dependencies and generated output are excluded. PowerShell packaging syntax passed, and the temporary verification ZIP was deleted. Fresh destination-PC installation and actual prerequisite installation/sign-in were not exercised.
 
 ## Connected evidence and limits
 

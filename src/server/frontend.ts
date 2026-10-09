@@ -9,7 +9,7 @@ export async function sendFrontend(path: string, response: ServerResponse): Prom
       ? 'index.html'
       : path === '/testing'
         ? 'testing.html'
-        : /^\/assets\/[a-zA-Z0-9_-]+\.(js|css)$/u.test(path)
+        : /^\/assets\/[a-zA-Z0-9_-]+\.(js|css|woff2)$/u.test(path)
           ? path.slice(1)
           : null;
   if (!file) return false;
@@ -23,8 +23,12 @@ export async function sendFrontend(path: string, response: ServerResponse): Prom
     ? 'text/html'
     : file.endsWith('.css')
       ? 'text/css'
-      : 'text/javascript';
-  response.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` });
+      : file.endsWith('.woff2')
+        ? 'font/woff2'
+        : 'text/javascript';
+  response.writeHead(200, {
+    'Content-Type': file.endsWith('.woff2') ? type : `${type}; charset=utf-8`,
+  });
   response.end(content);
   return true;
 }

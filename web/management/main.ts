@@ -1,53 +1,41 @@
+import { createRoot } from 'react-dom/client';
+import { createElement } from 'react';
 import { startPlayback } from '../playback/player.ts';
 import { get } from '../shared/dom.ts';
-import { createActivityFeed, statusLabels } from './activity.ts';
+import { Activity } from './activity.tsx';
 import { createSettings } from './settings.ts';
+import { createServerState } from './server-state.ts';
 import { route } from './navigation.ts';
-import { bindPlaybackControls } from './controls.ts';
 import type { PlaybackState, SettingsSection } from '../../src/shared/protocol.ts';
-let state: PlaybackState | null = null,
-  connected = false,
+import './style.css';
+
+let state: PlaybackState | null = null;
+let connected = false,
   pending = false,
   owner: boolean | null = null;
-let quitting = false,
-  pageActive = true,
-  revision = 0;
-let timer: ReturnType<typeof setTimeout> | undefined;
-async function command(route: string, body: unknown, timeout = 5000): Promise<any> {
-  if (pending || !connected)
-    throw new Error('Wait for the current action or reconnect to the server.');
-  pending = true;
-  revision++;
-  try {
-    const response = await fetch(route, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeout),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'The action could not be completed.');
-    get('message').textContent = '';
-    if (result.queue) {
-      state = result;
-      render(result);
-    }
-    return result;
-  } catch (error) {
-    const text =
-      error instanceof Error && error.name !== 'TypeError' && error.name !== 'TimeoutError'
-        ? error.message
-        : 'Connection interrupted. Check the current state before trying again.';
-    get('message').textContent = text;
-    throw new Error(text);
-  } finally {
-    pending = false;
-    revision++;
-    if (state) render(state);
-  }
+let quitting = false;
+const root = createRoot(get('activity-root'));
+const server = createServerState((view) => {
+  connected = view.connected;
+  pending = view.pending;
+  get('message').textContent = view.message;
+  if (view.state) render(view.state);
+  else renderActivity();
+  renderConnection();
+});
+const command = server.command;
+function renderActivity() {
+  root.render(
+    createElement(Activity, {
+      state,
+      connected,
+      pending,
+      command,
+      openSettings: () => route('settings'),
+    }),
+  );
 }
-function render(next: PlaybackState) {
-  state = next;
+function renderConnection() {
   get('connection').textContent = !connected
     ? 'Server offline'
     : owner === true
@@ -55,47 +43,20 @@ function render(next: PlaybackState) {
       : owner === false
         ? 'Audio in another tab'
         : 'Audio connecting';
-  const q = next.queue,
-    active = q?.requests.find((r) => r.id === q.activeId);
-  get<HTMLButtonElement>('pause').textContent = q?.paused ? 'Resume' : 'Pause';
-  get('pause').setAttribute('aria-pressed', String(!!q?.paused));
-  get<HTMLButtonElement>('pause').disabled = pending || !connected || !q;
-  get<HTMLButtonElement>('skip').disabled = pending || !connected || !active;
-  get<HTMLButtonElement>('clear').disabled = pending || !connected || !q?.waitingIds.length;
-  get<HTMLButtonElement>('stop-clear').disabled =
-    pending || !connected || (!active && !q?.waitingIds.length);
-  get<HTMLButtonElement>('mute').textContent = next.muted ? 'Unmute' : 'Mute';
-  get('mute').setAttribute('aria-pressed', String(next.muted));
-  get<HTMLButtonElement>('mute').disabled = pending || !connected;
-  if (document.activeElement !== get('volume'))
-    get<HTMLInputElement>('volume').value = String(Math.round(next.volume * 100));
-  get('volume-value').textContent = `${get<HTMLInputElement>('volume').value}%`;
-  get('mode').textContent =
-    q?.mode === 'demo'
-      ? 'Demo — simulated replies and test audio'
-      : q?.mode === 'live'
-        ? 'Configured providers — explicit tests use their allowance'
-        : 'Local setup incomplete';
-  get('detail').textContent = active
-    ? `${statusLabels[active.status] || active.status}${q?.paused ? ' — paused' : ''}`
-    : q?.paused
-      ? 'Queue paused.'
-      : '';
-  get('playback-progress').hidden = !next.progress;
-  if (next.progress) {
-    get<HTMLProgressElement>('progress').max = next.progress.durationSeconds;
-    get<HTMLProgressElement>('progress').value = next.progress.elapsedSeconds;
-    get('progress-time').textContent =
-      `${Math.round(next.progress.elapsedSeconds)} / ${Math.round(next.progress.durationSeconds)}s`;
-  }
-  renderFeed(next);
+}
+function render(next: PlaybackState) {
+  state = next;
+  renderActivity();
   settings.render(next);
   get<HTMLButtonElement>('quit').disabled = pending || !next.canQuit;
+  get('mode').textContent =
+    next.queue?.mode === 'demo'
+      ? 'Demo — simulated replies and test audio'
+      : next.queue?.mode === 'live'
+        ? 'Configured providers — explicit tests use their allowance'
+        : 'Local setup incomplete';
 }
-const renderFeed = createActivityFeed();
 const settings = createSettings(command, render, route);
-bindPlaybackControls(command, () => state);
-
 document.addEventListener('click', (event) => {
   const button = (event.target as Element).closest<HTMLElement>('button, [data-target]');
   if (!button || (button as HTMLButtonElement).disabled) return;
@@ -111,10 +72,6 @@ document.addEventListener('click', (event) => {
   }
   if (button.dataset.discard && state?.management) {
     settings.discard(button.dataset.discard as SettingsSection, state.management);
-    return;
-  }
-  if (button.dataset.remove) {
-    void command('/api/requests/remove', { id: button.dataset.remove }).catch(() => {});
     return;
   }
   if (button.dataset.check) {
@@ -159,6 +116,7 @@ document.addEventListener('click', (event) => {
       .then(() => {
         quitting = true;
         playback.stop();
+        server.suspend();
         get('message').textContent =
           action === 'restart'
             ? 'Restarting. The launcher will reopen the browser.'
@@ -169,43 +127,12 @@ document.addEventListener('click', (event) => {
 });
 const playback = startPlayback((primary) => {
   owner = primary;
-  get('connection').textContent = !connected
-    ? 'Server offline'
-    : primary === true
-      ? 'Audio in this tab'
-      : primary === false
-        ? 'Audio in another tab'
-        : 'Audio connecting';
+  renderConnection();
 });
-async function poll() {
-  if (quitting || !pageActive) return;
-  const at = revision;
-  try {
-    const r = await fetch('/api/state', { signal: AbortSignal.timeout(2000) });
-    if (!r.ok) throw new Error();
-    const next = (await r.json()) as PlaybackState;
-    if (at === revision && !pending && pageActive) {
-      connected = true;
-      render(next);
-    }
-  } catch {
-    if (at === revision && !pending) {
-      connected = false;
-      get('connection').textContent = 'Server offline';
-    }
-  }
-  if (pageActive && !quitting) timer = setTimeout(() => void poll(), 500);
-}
-window.addEventListener('pagehide', () => {
-  pageActive = false;
-  revision++;
-  clearTimeout(timer);
-});
+window.addEventListener('pagehide', () => server.suspend());
 window.addEventListener('pageshow', (event) => {
-  if (event.persisted && !quitting) {
-    pageActive = true;
-    void poll();
-  }
+  if (event.persisted && !quitting) server.start();
 });
 route('activity');
-void poll();
+renderActivity();
+server.start();
