@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.browser.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "paths": { "@/*": ["./web/management/prototype/*"] }
+  },
+  "include": ["web/management/prototype/**/*.ts", "web/management/prototype/**/*.tsx"]
+}

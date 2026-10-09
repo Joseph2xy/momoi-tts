@@ -8,10 +8,11 @@ Local browser operation and configuration are implemented: reopenable setup chec
 
 Normal/demo startup does not connect Twitch. Demo uses synthetic dialogue/audio. Generation supports OpenRouter and guarded Codex CLI; hosted speech uses Fish. Characters are file-based profiles with prompts and assigned voices. [README](README.md) owns usage, [architecture](docs/architecture.md) boundaries, and [verification](docs/verification.md) results and limits.
 
-Browser code is grouped by management, testing, playback and shared assets; backend provider actions are separate from settings persistence. Repository: private Joseph2xy/placeholder on master; naming is provisional. No next implementation task is selected.
+Browser code is grouped by management, testing, playback and shared assets; backend provider actions are separate from settings persistence. Repository: private Joseph2xy/placeholder; naming is provisional. Activity layout review is on branch `prototype/activity-layouts`; production browser behavior is unchanged.
 
 ## Agreed scope
 
+- The visual overhaul will use React/TypeScript/Vite, Tailwind, selective shadcn components, and TanStack Query. The dark theme and typography reference is [Tania Rascia's site](https://www.taniarascia.com/). The screen supports quick checks and intervention. Three synthetic layout prototypes (compact, dashboard, adaptive) await user selection; routing and the final layout remain open. Consult current official documentation during implementation.
 - The app is a mostly unattended stream utility. Activity supports checking work and playback intervention; completed history is read-only. Configuration, diagnostics, tests, restart, and shutdown belong in management.
 - Characters initially need a name/identifier, prompt, and assigned voice. File-based editing is sufficient; browser character creation is not required.
 - Twitch uses one shared Channel Points reward with Name: question. Missing/unknown names are rejected and refunded after Twitch confirms; no default character. Viewer submissions are live-only, without an offline backlog. Local testing is independent.
@@ -30,4 +31,4 @@ Final provider/model/persona/voice choices and naming are open. Avatars, vision,
 
 Recorded private development configuration selects nvidia/nemotron-3.5-lightning:free with a 4,096-token ceiling and temporary keys. These are not final choices or authorization to use them. Both agreed three-request generation budgets are exhausted. Replace temporary OpenRouter/Fish keys and verify access/terms before separately agreed connected use. Never reproduce saved keys.
 
-Review servers are stopped.
+The frontend-only layout review runs on port 3222 using `npm run prototype:ui`; it uses sample data and simulated controls, without backend or provider calls. Other review servers are stopped.

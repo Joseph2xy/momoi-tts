@@ -25,20 +25,35 @@
     "check:tools": "node tests/codex-tools.test.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.browser.json --noEmit",
     "format": "prettier --write src web tests \"scripts/**/*.ts\" vite.config.ts",
-    "format:check": "prettier --check src web tests \"scripts/**/*.ts\" vite.config.ts"
+    "format:check": "prettier --check src web tests \"scripts/**/*.ts\" vite.config.ts",
+    "prototype:ui": "vite --config vite.prototype.config.ts",
+    "prototype:check": "tsc -p tsconfig.prototype.json --noEmit"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.19.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.18.2",
+    "@vitejs/plugin-react": "^6.1.2",
     "prettier": "3.9.9",
+    "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.3",
     "ws": "^8.22.0"
   },
   "dependencies": {
+    "@fontsource-variable/outfit": "^5.3.0",
     "@twurple/api": "^8.2.0",
     "@twurple/auth": "^8.2.0",
-    "@twurple/eventsub-ws": "^8.2.0"
+    "@twurple/eventsub-ws": "^8.2.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.54.0",
+    "radix-ui": "^1.7.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwind-merge": "^3.7.0"
   },
   "prettier": {
     "singleQuote": true,

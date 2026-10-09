@@ -15,6 +15,7 @@ One local Node/TypeScript application serves browser management and a separate t
 | `src/server/` | HTTP validation, loopback/same-origin restrictions, audio/static delivery |
 | `src/shared/` | Safe browser/server contracts and input errors |
 | `web/management/` | Management entrypoint, navigation, settings drafts, activity feed and playback controls |
+| `web/management/prototype/`, `web/prototype.html` | Throwaway Activity layout comparison on `prototype/activity-layouts`, with shared synthetic state and no backend access |
 | `web/testing/` | Independent testing-page entrypoint |
 | `web/playback/` | Audio ownership and playback lifecycle |
 | `web/shared/`, `web/styles/` | Browser DOM helpers and shared app stylesheet |

@@ -36,6 +36,22 @@ Same-browser script-free copies of the current DOM/stylesheet had no horizontal 
 
 The organizational-pass review also loaded both built pages in the T3 collaborative browser against isolated demo settings. DOM inspection and interactions verified the first-use checklist, navigation, draft retention across views, Discard, saved playback defaults, and a synthetic response-only test. Testing had no audio element. Snapshot capture failed; this review adds no screenshot or responsive-layout evidence. The review server and disposable settings were removed afterward.
 
+## Activity layout prototype evidence
+
+On 2026-10-09, branch `prototype/activity-layouts` passed the existing production build
+and strict server/browser TypeScript, plus `prototype:check` for the isolated React
+prototype. The production build includes only its existing management and testing pages.
+
+T3 browser review loaded all three layout variants and captured desktop screenshots.
+Interactions verified pause, skip advancing the sample queue while preserving pause,
+state retention when switching variants, waiting-question removal and its empty state,
+recent-response expansion, and sample reset. Browser inspection found no audio element
+or `/api/` resource requests. These are synthetic interactions, not live queue evidence.
+
+Script-free DOM/stylesheet copies of all three variants had no horizontal overflow at
+390 CSS pixels; dashboard and adaptive grids reduced to one column. Direct browser
+resizing timed out, so actual narrow-window interaction remains unverified.
+
 ## Packaging evidence
 
 The transfer package passed a fresh check during the organizational pass: the new browser folders and backend provider-actions module are included; superseded browser paths, private state, dependencies and generated output are excluded. The public-file allowlist continues to include the five project documents. The temporary verification ZIP was deleted. Fresh destination-PC installation and actual prerequisite installation/sign-in were not exercised.
