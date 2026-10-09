@@ -65,10 +65,11 @@ The retained intake uses one shared `Name: question` reward, completion fulfillm
 ## Development
 
 On branch `prototype/activity-layouts`, run `npm run prototype:ui` and open
-[layout comparison](http://127.0.0.1:3222/prototype.html?variant=compact). The bottom
-switcher compares compact, dashboard and adaptive Activity layouts with shared sample
-messages. Skip, pause, mute and removal are simulated in memory; **Reset samples**
-restores the initial state. Expand recent entries to review their responses. Settings
+[layout comparison](http://127.0.0.1:3222/prototype.html?variant=feed). The bottom
+switcher compares a transcript feed and a message list with a detail inspector, using
+shared sample messages. Skip, pause, mute and removal are simulated in memory;
+**Reset samples** restores the initial state. The feed shows responses directly;
+select an entry in the inspector variant to review its full question and response. Settings
 and actual playback are outside this review. No backend server, credentials or provider
 access is needed. The prototype page is excluded from the production Vite build.
 `npm run prototype:check` checks its React TypeScript code. Stop the review with Ctrl+C.

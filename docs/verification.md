@@ -42,15 +42,18 @@ On 2026-10-09, branch `prototype/activity-layouts` passed the existing productio
 and strict server/browser TypeScript, plus `prototype:check` for the isolated React
 prototype. The production build includes only its existing management and testing pages.
 
-T3 browser review loaded all three layout variants and captured desktop screenshots.
-Interactions verified pause, skip advancing the sample queue while preserving pause,
-state retention when switching variants, waiting-question removal and its empty state,
-recent-response expansion, and sample reset. Browser inspection found no audio element
-or `/api/` resource requests. These are synthetic interactions, not live queue evidence.
+T3 browser review loaded the transcript feed and list/detail variants and captured
+desktop screenshots. Interactions verified selection of waiting and completed entries,
+full question/response inspection, waiting-response exclusion, selected-entry removal
+and its updated outcome, pause, skip advancing the sample queue while preserving pause
+and independent history selection, state retention when switching variants, and reset.
+Remove buttons fit inside their list rows. Browser inspection found no audio element,
+nested buttons, or `/api/` resource requests. These are synthetic interactions, not live
+queue evidence. Build, prototype TypeScript, and formatting passed for these variants.
 
-Script-free DOM/stylesheet copies of all three variants had no horizontal overflow at
-390 CSS pixels; dashboard and adaptive grids reduced to one column. Direct browser
-resizing timed out, so actual narrow-window interaction remains unverified.
+Script-free DOM/stylesheet copies of both variants had no horizontal overflow at
+320, 390, and 600 CSS pixels; the inspector layout reduced to one column. Direct browser
+resizing remains unverified after earlier timeouts, so this is limited layout evidence.
 
 ## Packaging evidence
 
