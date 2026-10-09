@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#111319" />
+    <title>Stream characters</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="module" src="./main.ts"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Stream characters<span>.</span></h1>
+          <p>Viewers choose who answers.</p>
+        </div>
+        <div class="header-status">
+          <span id="mode" class="pill">Connecting</span
+          ><span id="connection" class="connection" data-connected="false">Audio connecting</span>
+        </div>
+      </header>
+      <p id="message" class="error alert" role="alert"></p>
+      <div class="layout">
+        <div class="responses">
+          <section class="player" aria-labelledby="playback-heading">
+            <div class="section-heading">
+              <h2 id="playback-heading">Playback</h2>
+              <span id="status" class="pill">Idle</span>
+            </div>
+            <h3 id="clip">No active response</h3>
+            <p id="detail" role="status">Connecting…</p>
+            <p id="playback-note" class="notice" role="status"></p>
+            <button id="enable" hidden>Enable audio</button>
+            <div id="response-content" class="response-content" hidden>
+              <p id="current-question" class="request-question" hidden></p>
+              <blockquote id="current-dialogue" hidden></blockquote>
+            </div>
+            <div id="playback-progress" class="playback-progress" hidden>
+              <progress
+                id="progress"
+                aria-label="Speech playback progress"
+                max="1"
+                value="0"
+              ></progress
+              ><span id="progress-time">0:00 / 0:00</span>
+            </div>
+            <div class="transport">
+              <button id="pause" aria-pressed="false" disabled>Pause</button
+              ><button id="skip" class="secondary" disabled>Skip current</button
+              ><button id="stop-clear" class="quiet danger" disabled>Stop and clear</button>
+            </div>
+            <div class="audio-settings">
+              <button id="mute" class="quiet" aria-pressed="false" disabled>Mute</button
+              ><label for="volume">Volume</label
+              ><input id="volume" type="range" min="0" max="100" value="100" disabled /><output
+                id="volume-value"
+                for="volume"
+                >100%</output
+              >
+            </div>
+          </section>
+          <section class="requests" aria-labelledby="requests-heading">
+            <div class="section-heading">
+              <h2 id="requests-heading">Requests</h2>
+              <span id="queue-count" class="count">0 active · 0/2 waiting</span
+              ><button id="clear" class="quiet small" disabled>Clear waiting</button>
+            </div>
+            <p id="queue-note" class="help" role="status"></p>
+            <div id="feed"><p class="empty">No requests yet.</p></div>
+          </section>
+        </div>
+        <aside>
+          <details class="twitch">
+            <summary>
+              Twitch connection <span id="twitch-status" class="pill">Disconnected</span>
+            </summary>
+            <p id="twitch-detail" class="help">Loading connection status…</p>
+            <div class="actions">
+              <button id="twitch-connect" class="secondary small" disabled>Connect Twitch</button
+              ><button id="twitch-disconnect" class="quiet small" disabled>Disconnect</button>
+            </div>
+            <p id="twitch-rejection" class="error" role="status"></p>
+          </details>
+        </aside>
+      </div>
+      <footer>
+        <span>Keep this page open for audio. Reopen and Resume after closing or refreshing.</span
+        ><button id="quit" class="quiet small" disabled>Quit app</button>
+      </footer>
+    </main>
+  </body>
+</html>

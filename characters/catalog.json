@@ -1,0 +1,8 @@
+[
+  {
+    "id": "tyrone",
+    "name": "Tyrone",
+    "promptFile": "prompts/tyrone.txt",
+    "voiceIdEnv": "FISH_VOICE_ID"
+  }
+]

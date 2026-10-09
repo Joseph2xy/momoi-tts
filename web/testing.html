@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Testing · Stream characters</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="module" src="./testing.ts"></script>
+  </head>
+  <body>
+    <main class="testing-page">
+      <header>
+        <div>
+          <h1>Testing<span>.</span></h1>
+          <p>Manual submissions for checking the app.</p>
+        </div>
+        <span id="mode" class="pill">Connecting</span>
+      </header>
+      <p>
+        Keep the <a href="/" target="_blank" rel="noopener">stream controls</a> open in another tab
+        for audio. Test questions enter the same queue as viewer requests.
+      </p>
+      <p id="message" class="error alert" role="alert"></p>
+      <section class="test-input" aria-labelledby="testing-heading">
+        <h2 id="testing-heading">Send a test question</h2>
+        <p id="mode-note" class="help">Connecting…</p>
+        <p id="characters" class="help"></p>
+        <form id="question-form">
+          <label for="viewer">Viewer</label
+          ><input
+            id="viewer"
+            type="text"
+            maxlength="40"
+            value="Streamer"
+            autocomplete="off"
+          /><label for="question">Personality: question</label
+          ><textarea
+            id="question"
+            rows="4"
+            maxlength="1042"
+            placeholder="Name: your question…"
+            aria-describedby="characters input-format"
+            required
+          ></textarea>
+          <p id="input-format" class="help">
+            Include the personality name followed by a colon. Missing or unknown names are rejected;
+            Channel Points are refunded after Twitch confirms.
+          </p>
+          <button id="submit" type="submit" disabled>Send question</button>
+        </form>
+        <p id="queue-rules" class="help rules"></p>
+      </section>
+      <p id="submission-status" role="status"></p>
+      <p id="test-status" role="status">Connecting…</p>
+    </main>
+  </body>
+</html>

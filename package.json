@@ -1,0 +1,47 @@
+{
+  "name": "tyrone",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.12.0"
+  },
+  "scripts": {
+    "package": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build/package.ps1",
+    "ask": "node --env-file-if-exists=.local/generation.env scripts/auditions/ask.ts",
+    "speak": "node --env-file-if-exists=.local/generation.env --env-file=.local/fish.env scripts/auditions/speak.ts",
+    "build:browser": "vite build",
+    "build": "npm run typecheck && npm run build:browser",
+    "dev:browser": "vite build --watch",
+    "dev:server": "node --watch --env-file-if-exists=.local/generation.env --env-file-if-exists=.local/fish.env --env-file-if-exists=.local/twitch.env src/app/main.ts",
+    "start": "node --env-file-if-exists=.local/generation.env --env-file-if-exists=.local/fish.env --env-file-if-exists=.local/twitch.env scripts/launch/run.ts",
+    "demo": "node --env-file-if-exists=.local/twitch.env scripts/launch/run.ts --demo",
+    "twitch:login": "node --env-file=.local/twitch.env scripts/twitch/login.ts",
+    "twitch:reward": "node --env-file=.local/twitch.env scripts/twitch/reward.ts",
+    "pretest": "npm run build:browser",
+    "test": "node --test tests/*.test.ts",
+    "pretest:offline": "npm run build:browser",
+    "test:offline": "node --test tests/characters.test.ts tests/config.test.ts tests/frontend.test.ts tests/launcher.test.ts tests/openrouter.test.ts tests/playback.test.ts tests/queue.test.ts tests/speech.test.ts tests/twitch.test.ts tests/twitch-sdk.test.ts",
+    "check:tools": "node tests/codex-tools.test.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.browser.json --noEmit",
+    "format": "prettier --write src web tests \"scripts/**/*.ts\" vite.config.ts",
+    "format:check": "prettier --check src web tests \"scripts/**/*.ts\" vite.config.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "@types/ws": "^8.18.2",
+    "prettier": "3.9.9",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3",
+    "ws": "^8.22.0"
+  },
+  "dependencies": {
+    "@twurple/api": "^8.2.0",
+    "@twurple/auth": "^8.2.0",
+    "@twurple/eventsub-ws": "^8.2.0"
+  },
+  "prettier": {
+    "singleQuote": true,
+    "printWidth": 100
+  }
+}

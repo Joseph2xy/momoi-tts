@@ -1,0 +1,10 @@
+CHARACTER APP - WINDOWS SETUP
+
+Extract the whole ZIP before running it.
+Install Node.js 24.12 or newer: https://nodejs.org/en/download
+Double-click Setup Tyrone.cmd, then try the demo.
+Enter Name: question, for example Tyrone: How do I improve?
+
+Follow docs/streamer-setup.md with your helper for accounts and daily use.
+App naming is deferred; launcher filenames retain Tyrone for now.
+The package contains no private settings or accounts. OBS setup is deferred.
