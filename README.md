@@ -1,6 +1,6 @@
 # Stream characters
 
-A local Windows companion that turns a named character's question into dialogue and assigned-voice playback. Browser management is integrated; Twitch connection and OBS setup are deferred. Tyrone is the first file-based character. App naming and final theme/model/voice refinement remain deferred.
+A local Windows companion that turns a named character's question into dialogue and assigned-voice playback. Browser management is integrated; Twitch connection and OBS setup are deferred. Tyrone is the first file-based character. App naming and final model/voice refinement remain deferred.
 
 ## Run locally
 
@@ -15,13 +15,13 @@ Demo uses synthetic dialogue and a two-second tone, with no provider or Twitch c
 
 On Windows, **Try Tyrone Demo.cmd** starts/reuses demo; **Launch Tyrone.cmd** starts/reuses normal mode. **Setup Tyrone.cmd** runs prerequisite bootstrap and opens normal mode. Missing Node/dependencies produce explicit assisted-install prompts. Repeated launches reuse matching servers; a mismatch requires explicit shutdown/relaunch. Switch modes only after shutdown. Private launcher logs remain in `.local/launcher*.log`.
 
-For transfer, `npm run package` writes a public-source ZIP under `.generated/releases/`, excluding private state, dependencies and generated output. Extract before launch. See [Windows setup](docs/streamer-setup.md).
+For transfer, `npm run package` writes a public-source ZIP under `.generated/releases/`, excluding private state, dependencies and generated output. Extract the entire ZIP into a writable folder and keep its files together before running a shortcut. The package contains no private settings or accounts. Node installation may need administrator approval; reopen the shortcut afterward. Dependency setup downloads pinned packages and builds the interface.
 
 ## Browser management and private configuration
 
 First opening shows a reopenable setup checklist. Activity remains accessible with incomplete setup; normal full requests require generation, speech and voices. No provider is silently chosen for new management installations. Connections identifies Twitch as a later phase. Settings has Generation, Speech, Character voices, Playback and Application sections.
 
-Each section has Save/Discard. Drafts survive navigation within the tab and remain in page memory. Save validates and writes local files without contacting providers. Blank secret replacements retain existing values; saved keys/voice IDs are never returned to the page. Active requests finish on their original settings; waiting requests use changes before starting, retaining character selection. Default volume applies on the next launch. Restart warns before clearing queued work and returns paused.
+Generation, Speech, Character voices, and Playback have Save/Discard; Application contains actions and diagnostics. Drafts survive navigation within the tab and remain in page memory. Save validates and writes local files without contacting providers. Blank secret replacements retain existing values; saved keys/voice IDs are never returned to the page. Active requests finish on their original settings; waiting requests use changes before starting, retaining character selection. Default volume applies on the next launch. Restart warns before clearing queued work and returns paused.
 
 | File | Purpose |
 | --- | --- |
@@ -36,7 +36,7 @@ Connection checks and response/voice tests are explicit separate actions. API-ke
 
 OpenRouter requires `TYRONE_TEXT_PROVIDER=openrouter`, `OPENROUTER_API_KEY` and an exact `OPENROUTER_MODEL`. No final model is selected. `OPENROUTER_MAX_TOKENS` defaults to 1024, range 64–16384, and includes reasoning for many models; the separate spoken limit is 60 words. Incomplete/overlength replies are rejected without retry/truncation. Temporary zero-price caps, one exact model, no tools/plugins and no fallback prevent paid routing. Verify current free access, allowance and terms before connected use. Presets, automatic routers and search-enabled variants remain unsupported.
 
-Codex requires explicit `TYRONE_TEXT_PROVIDER=codex`, ChatGPT sign-in and guarded CLI **0.162.0**. Codex installation and ChatGPT sign-in are separate from app setup. Prepare guarded CLI 0.162.0 externally, then select Codex in Settings; the app offers only a local prerequisite check. Other versions remain rejected until checked. Optional private `TYRONE_CODEX_BIN`/`TYRONE_CODEX_LAUNCHER` paths remain supported. Legacy audition configuration retains its Codex default, while new browser management requires explicit selection. Subscription access does not imply unlimited or API-billed use.
+Codex requires explicit `TYRONE_TEXT_PROVIDER=codex`, ChatGPT sign-in and guarded CLI **0.162.0**. Prepare that version externally with your helper and use `codex login` with the streamer's ChatGPT account before selecting Codex in Settings. The app checks executable/version only, not sign-in or allowance. Other versions remain rejected until checked. Optional private `TYRONE_CODEX_BIN`/`TYRONE_CODEX_LAUNCHER` paths are supported. Audition configuration defaults to Codex; browser management requires explicit selection. Subscription access does not imply unlimited or API-billed use.
 
 Speech currently uses Fish `s2.1-pro-free`. Verify access, allowance and commercial terms before live speech. Final provider/persona/voice evaluation remains separate.
 
@@ -73,7 +73,7 @@ npm run format:check
 
 `build` runs strict server/browser TypeScript and Vite. `test:offline` runs eleven service-independent test files. `check:tools` probes the guarded installed Codex CLI against a fake loopback provider. `npm test` runs all twelve files. Candidate checks use `npm run check:tools -- --candidate-version=X.Y.Z`; passing does not approve changing the guard. No test command authorizes live allowance. [Verification](docs/verification.md) owns evidence and limitations.
 
-`npm run format` uses pinned development-only Prettier. For development, run `npm run dev:browser` and `npm run dev:server` separately, wait for the browser build, then refresh after changes. Server restarts reset queued work. The superseded mockup and launcher-management wizard have been removed.
+`npm run format` uses pinned development-only Prettier. For development, run `npm run dev:browser` and `npm run dev:server` separately, wait for the browser build, then refresh after changes. Server restarts reset queued work.
 
 Explicit later-stage auditions consume configured allowance:
 
@@ -83,6 +83,6 @@ npm run speak -- "Tyrone: Your fixed audition text"
 npm run speak -- --question "Tyrone: Your question"
 ```
 
-Audition output may contain private dialogue. `.generated/` owns builds, packages, auditions and check reports. `.local/` owns private configuration, accounts/recovery and logs.
+Audition output may contain private dialogue. `.generated/` owns builds, packages, auditions and check reports. `.local/` owns private configuration, accounts/recovery and logs. Do not share that folder or account caches. Diagnostics redact provider failures.
 
 [Boundaries](docs/architecture.md) · [Decisions](PROJECT_HANDOFF.md) · [Instructions](AGENTS.md)

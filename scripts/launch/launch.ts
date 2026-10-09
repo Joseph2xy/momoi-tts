@@ -1,3 +1,4 @@
+import { configuredPipeline } from '../../src/app/provider-actions.ts';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +15,7 @@ async function launch() {
   const store = new SettingsStore({ demo: args.includes('--demo') });
   const config = { port: store.port, demo: store.demo };
   const base = `http://127.0.0.1:${config.port}`;
-  const expectedMode = store.pipeline()?.mode ?? 'disabled';
+  const expectedMode = configuredPipeline(store)?.mode ?? 'disabled';
   const nonce = randomBytes(32).toString('hex');
   async function running(): Promise<boolean> {
     let response: Response;

@@ -1,3 +1,9 @@
+import {
+  configuredPipeline,
+  voiceTestPipeline,
+  testResponse,
+  checkConnection,
+} from './provider-actions.ts';
 import type { QueuePipeline, QueueSettings } from '../queue/contracts.ts';
 import { PlaybackSession } from '../playback/session.ts';
 import { TwitchIntake, type TwitchTransportFactory } from '../twitch/intake.ts';
@@ -73,7 +79,7 @@ export class AppRuntime {
     store.save(section, body);
     if (['generation', 'speech', 'characters'].includes(section)) {
       this.#pendingFor = this.session.queue.snapshot().activeId;
-      this.session.queue.setPipeline(store.pipeline());
+      this.session.queue.setPipeline(configuredPipeline(store));
     }
     return this.snapshot();
   }
@@ -96,7 +102,7 @@ export class AppRuntime {
   checkConnection(section: unknown) {
     if (!this.#options.management)
       throw new RequestInputError('Connection checks are unavailable.');
-    return this.#options.management.checkConnection(section);
+    return checkConnection(this.#options.management, section);
   }
   refreshProfiles() {
     const store = this.#options.management;
@@ -107,7 +113,7 @@ export class AppRuntime {
       throw new RequestInputError('Check the character catalog and prompt files before reloading.');
     }
     this.#pendingFor = this.session.queue.snapshot().activeId;
-    this.session.queue.setPipeline(store.pipeline());
+    this.session.queue.setPipeline(configuredPipeline(store));
     return this.snapshot();
   }
   async testResponse(question: unknown, signal: AbortSignal) {
@@ -120,7 +126,7 @@ export class AppRuntime {
       );
     this.#testing = true;
     try {
-      return { dialogue: await this.#options.management.testResponse(question, signal) };
+      return { dialogue: await testResponse(this.#options.management, question, signal) };
     } finally {
       this.#testing = false;
     }
@@ -135,7 +141,7 @@ export class AppRuntime {
       'Voice test',
       `${profile.name}: Voice test`,
       body.eventId,
-      store.voicePipeline(),
+      voiceTestPipeline(store),
     );
     return this.snapshot();
   }

@@ -1,3 +1,4 @@
+import { configuredPipeline } from './provider-actions.ts';
 import { createAppServer } from './server.ts';
 import { SettingsStore } from './settings.ts';
 import { startRestart } from './setup-actions.ts';
@@ -7,7 +8,7 @@ if (args.some((arg) => !['--demo', '--no-open'].includes(arg)))
 const store = new SettingsStore({ demo: args.includes('--demo') });
 const port = store.port;
 const server = createAppServer({
-  pipeline: store.pipeline(),
+  pipeline: configuredPipeline(store),
   management: store,
   settings: store.queueSettings(),
   configurationProof: (nonce) => store.proof(nonce),

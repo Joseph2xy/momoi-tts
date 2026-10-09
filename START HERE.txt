@@ -1,6 +1,6 @@
 CHARACTER APP - WINDOWS SETUP
 
 Extract the whole ZIP before running it.
-Follow docs/streamer-setup.md with your helper for prerequisites, Setup Tyrone.cmd,
-the local demo, accounts, and daily use. That guide owns the setup instructions.
+Follow README.md with your helper for prerequisites, Setup Tyrone.cmd,
+the local demo, accounts, and daily use.
 The package contains no private settings or accounts.

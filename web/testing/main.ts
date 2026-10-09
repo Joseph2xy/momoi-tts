@@ -1,6 +1,6 @@
-import type { PlaybackState } from '../src/shared/protocol.ts';
+import type { PlaybackState } from '../../src/shared/protocol.ts';
 
-const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+import { get } from '../shared/dom.ts';
 const form = get<HTMLFormElement>('question-form');
 const question = get<HTMLTextAreaElement>('question');
 const viewer = get<HTMLInputElement>('viewer');

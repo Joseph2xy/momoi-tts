@@ -12,14 +12,9 @@ import { parseEnv } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { readConfig, configurationProof } from './config.ts';
 import { readGenerationConfig } from './generation.ts';
-import { generateConfiguredDialogue } from './generation.ts';
-import { synthesizeSpeech } from '../providers/fish/synthesize-speech.ts';
-import { selectCharacter } from '../characters/input.ts';
 import { readCharacters } from '../characters/catalog.ts';
-import { demoPipeline, livePipeline } from './pipeline.ts';
 import { RequestInputError } from '../shared/errors.ts';
 import type { ManagementState, SettingsSection } from '../shared/protocol.ts';
-import type { QueuePipeline } from '../queue/contracts.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const files = ['generation.env', 'fish.env'] as const;
@@ -106,8 +101,8 @@ export class SettingsStore {
       waitingExpiryMs: duration('TYRONE_WAITING_EXPIRY_MS', 180000),
     };
   }
-  profiles() {
-    return readCharacters({}, true, this.#catalog);
+  profiles(withVoices = false) {
+    return readCharacters(withVoices ? this.env() : {}, !withVoices, this.#catalog);
   }
   refreshProfiles() {
     this.profiles();
@@ -179,110 +174,6 @@ export class SettingsStore {
           name === 'TYRONE_PLAYBACK_PORT',
       ),
     };
-  }
-  pipeline(): QueuePipeline | undefined {
-    try {
-      if (this.demo) return demoPipeline(this.profiles());
-      if (!this.snapshot().localReady) return undefined;
-      const env = this.env();
-      return livePipeline(
-        env.FISH_API_KEY!,
-        readCharacters(env, false, this.#catalog),
-        readGenerationConfig(env),
-      );
-    } catch {
-      return undefined;
-    }
-  }
-  voicePipeline(): QueuePipeline {
-    if (this.demo) return demoPipeline(this.profiles());
-    const state = this.snapshot();
-    if (
-      !state.speech.ready ||
-      state.characters.some((p) => !p.voiceConfigured) ||
-      !state.characters.length
-    )
-      throw new RequestInputError('Configure speech and character voices before testing.');
-    const env = this.env();
-    return {
-      mode: 'live',
-      characters: readCharacters(env, false, this.#catalog),
-      async generate() {
-        return 'This is a voice test. Your character is ready to speak.';
-      },
-      async synthesize(text, signal, character) {
-        return (
-          await synthesizeSpeech({
-            text,
-            signal,
-            apiKey: env.FISH_API_KEY!,
-            voiceId: character.voiceId!,
-          })
-        ).audio;
-      },
-    };
-  }
-  async testResponse(question: unknown, signal: AbortSignal) {
-    const character = selectCharacter(question, this.profiles());
-    if (this.demo)
-      return await demoPipeline(this.profiles()).generate(
-        character.question,
-        signal,
-        character.character,
-      );
-    if (!this.snapshot().generation.ready)
-      throw new RequestInputError('Configure generation before testing.');
-    try {
-      return (
-        await generateConfiguredDialogue(readGenerationConfig(this.env()), {
-          question: character.question,
-          character: character.character.prompt,
-          signal,
-        })
-      ).dialogue;
-    } catch {
-      throw new RequestInputError(
-        'Response test failed or timed out. Check provider access and the saved model settings.',
-      );
-    }
-  }
-  async checkConnection(section: unknown, fetcher: typeof fetch = fetch) {
-    if (section !== 'generation' && section !== 'speech')
-      throw new RequestInputError('Unknown connection check.');
-    const env = this.env();
-    if (section === 'generation' && env.TYRONE_TEXT_PROVIDER !== 'openrouter')
-      throw new RequestInputError(
-        'For Codex, use Check prerequisites. Choose OpenRouter for an API-key connection check.',
-      );
-    if (this.demo)
-      return { ok: true, message: 'Demo check only. No connected provider was contacted.' };
-    const key = section === 'generation' ? env.OPENROUTER_API_KEY : env.FISH_API_KEY;
-    if (!key) throw new RequestInputError('Configure the saved API key first.');
-    try {
-      const response = await fetcher(
-        section === 'generation'
-          ? 'https://openrouter.ai/api/v1/key'
-          : 'https://api.fish.audio/wallet/self/api-credit',
-        {
-          method: 'GET',
-          redirect: 'error',
-          headers: { Authorization: `Bearer ${key}` },
-          signal: AbortSignal.timeout(10000),
-        },
-      );
-      await response.body?.cancel();
-      return {
-        ok: response.ok,
-        message: response.ok
-          ? 'Saved API key authenticated. No generation or speech was requested; model/voice access and allowance remain separate checks.'
-          : 'Connection check failed. Verify the saved key and provider access.',
-      };
-    } catch {
-      return {
-        ok: false,
-        message: 'Connection check failed or timed out. Verify provider access and try again.',
-      };
-    }
   }
   proof(nonce: string): string {
     // Retain compatibility with existing launcher proofs where configuration is complete.

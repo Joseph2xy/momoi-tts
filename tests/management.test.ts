@@ -1,3 +1,4 @@
+import { configuredPipeline, checkConnection } from '../src/app/provider-actions.ts';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -13,7 +14,7 @@ try {
   await writeFile(join(dir, 'fish.env'), '# Existing settings\nFISH_EXTRA_VOICE_ID=keep-me\n');
   const store = new SettingsStore({ privateRoot: dir, env: {} });
   assert.equal(store.snapshot().localReady, false);
-  assert.equal(store.pipeline(), undefined);
+  assert.equal(configuredPipeline(store), undefined);
   store.save('generation', {
     provider: 'openrouter',
     model: 'test/model:free',
@@ -77,13 +78,13 @@ try {
   assert.equal(await readFile(join(dir, 'app.json'), 'utf8'), appBefore);
   const codex = new SettingsStore({ privateRoot: dir, env: { TYRONE_TEXT_PROVIDER: 'codex' } });
   await assert.rejects(
-    codex.checkConnection('generation', (async () => {
+    checkConnection(codex, 'generation', (async () => {
       throw new Error('Codex has no API-key connection check');
     }) as typeof fetch),
     /Check prerequisites/,
   );
   let calls = 0;
-  const checked = await store.checkConnection('generation', (async (_url, init) => {
+  const checked = await checkConnection(store, 'generation', (async (_url, init) => {
     calls++;
     assert.equal(init?.method, 'GET');
     assert.equal(
@@ -95,19 +96,19 @@ try {
   assert.equal(calls, 1);
   assert(checked.ok);
   assert(!JSON.stringify(checked).includes('sensitive-account-data'));
-  const failed = await store.checkConnection('speech', (async () => {
+  const failed = await checkConnection(store, 'speech', (async () => {
     throw new Error('dummy-private-speech');
   }) as typeof fetch);
   assert(!failed.ok);
   assert(!JSON.stringify(failed).includes('dummy-private-speech'));
 
   const demo = new SettingsStore({ privateRoot: dir, env: {}, demo: true });
-  await demo.checkConnection('speech', (async () => {
+  await checkConnection(demo, 'speech', (async () => {
     throw new Error('Demo must not call a provider');
   }) as typeof fetch);
   let restarted = 0;
   const server = createAppServer({
-    pipeline: demo.pipeline(),
+    pipeline: configuredPipeline(demo),
     management: demo,
     settings: { globalCooldownMs: 0, viewerCooldownMs: 0 },
     onRestart: () => {

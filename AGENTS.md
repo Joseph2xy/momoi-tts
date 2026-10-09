@@ -1,39 +1,39 @@
 # Project instructions
 
-Read `PROJECT_HANDOFF.md` before making project decisions. Use `README.md` for commands, `docs/architecture.md` for code boundaries, and `docs/verification.md` for test evidence.
+Read [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md) for current status and agreed scope. Use [README](README.md) for usage/configuration/commands, [architecture](docs/architecture.md) for current boundaries, and [verification](docs/verification.md) for evidence. These documents do not authorize unrelated work.
 
-## Collaboration
+## Collaboration and judgment
 
-- Keep the user in the loop through discussion. Ask about unclear intent and consequential product, architecture, workflow, provider, account, cost, or default choices before treating them as agreed. Do not infer approval from research, silence, or existing code.
-- Separate user-confirmed requirements, recommendations awaiting discussion, temporary development settings, and observed behavior in plans and handoffs. Never promote a recommendation into a requirement or a confirmed choice.
-- Build the functional pieces first. Leave final model selection, output-quality evaluation, prompt/persona editing, voice selection, and fine-tuning until the end. Functional/offline tests still belong during implementation; they do not choose the final model or voice.
-- The intended initial connected functional trial uses a free model through OpenRouter. No specific model, paid account, API balance, or spending authorization is assumed. Discuss the trial and verify its free-access conditions before using it; never silently fall back to paid inference.
-- Be candid when the user's approach appears mistaken or a better option exists: explain the evidence and tradeoffs and invite discussion. Do not merely agree or work around an underlying problem.
-- Existing code and architecture are revisable, including a complete rewrite if justified. Discuss substantial alternatives instead of treating current implementation as a constraint or applying a workaround solely to preserve it. A rewrite is not automatically authorized by this openness.
-- Work on the component the user requests; do not treat the handoff as authorization to build everything.
-- Prioritize the desired result over provisional implementation choices. Change routes when evidence supports a better fit.
-- Look for suitable existing tools before implementing a component. Keep explanations and integration tests proportionate to this small app.
-- Use established concepts, interaction patterns, and workflows as a starting point; take inspiration from similar apps rather than rethinking familiar problems from scratch. This is not a preference for libraries or existing software; use those when they fit. Do not infer additional workflow decisions or authorization from this principle.
-- For routine live-operation workflows, use TTS donation/subscription-alert tools as the main reference, checking documented behavior where needed. This does not authorize adding those event types or adopting every reference-app behavior.
-- Distinguish requirements, provisional choices, documented capabilities, and hands-on results.
-- Update the handoff when material decisions or status change; avoid duplicating implementation history across documents.
+- Help the user make informed decisions. Explain relevant options in accessible language, research uncertain or changing claims, recommend an approach, and explain meaningful tradeoffs. Evaluate the user's suggestions rather than assuming they know the best implementation.
+- Discuss unclear intent and consequential product, architecture, workflow, provider, account, cost, or default choices before adopting them. Ask focused questions that help the user learn and express their goals. Do not infer agreement from silence, research, recommendations, or existing code. Carry out routine implementation within agreed scope without repeatedly requesting approval.
+- Be candid when an approach appears mistaken or a better option exists. Explain the evidence and invite discussion rather than merely accommodating the problem.
+- Every part of the project is revisable: requirements, workflows, providers, dependencies, architecture, and implementation. Existing choices and effort already spent are not reasons to keep an inferior solution. Recommend replacement or a complete restart when justified; discuss consequential changes before implementing them.
+- Before fixing a problem, step back: should it exist, what creates it, and would changing the underlying approach serve the goal better? Compare a local fix with meaningful alternatives. Avoid patches whose main purpose is preserving the implementation. Scale investigation to the problem.
+- Look for suitable existing tools and established approaches before building a component. Assess them against the user's needs; references do not settle requirements or authorize additional features.
+- For routine live-operation workflows, use documented TTS donation/subscription-alert behavior as a reference. This does not authorize adding those event types or adopting every reference-app behavior.
+- Work on the requested component. Keep the user informed about findings, assumptions, and decisions. Separate confirmed requirements, recommendations, temporary settings, and observed behavior.
+
+## Documentation
+
+- Record the current settled state directly. Include concise reasons when useful for understanding or reevaluating a decision. Omit discussion chronology, rejected options, and descriptions of what was replaced.
+- Replace obsolete information in its authoritative home. Keep prior-state information only when necessary for an active migration, compatibility issue, recovery, or relevant test limitation.
+- Give each topic one authoritative home and link rather than duplicating detail. Consolidate, remove, or add documents according to purpose; the file structure is revisable.
+- Keep the handoff concise: current status, agreed scope not represented by implemented behavior, provisional settings, unresolved questions, and blockers. Do not turn it into a transcript, changelog, or self-assigned roadmap.
+- Update affected documents when material state changes. Do not claim new verification from old evidence or describe planned behavior as implemented.
 
 ## Cleanup
 
-- Keep cleanup proportionate to the milestone. For small visual edits, remove superseded code/styles and temporary artifacts and check directly affected documentation/configuration. Reserve a repository-wide audit for substantial feature or architecture milestones. A blocked cleanup action does not prevent completing unrelated authorized work; record the unresolved item once in the handoff and continue.
-- Every retained item needs a current purpose: required behavior, an active development/test workflow, necessary recovery or private configuration, or concise evidence needed for future decisions. Remove dead code, abandoned experiments, superseded paths, stale artifacts, and obsolete instructions.
-- Consolidate overlapping documents and delete documents that no longer need to exist. Keep one authoritative home for each topic; update references, commands, packaging, and test evidence after cleanup. Do not preserve the existing file layout merely because it exists.
-- Discuss unclear feature removals and consequential changes with the user. Cleanup authorization covers clearly obsolete or redundant material, not silently redefining agreed behavior. Preserve credentials and recovery state; never expose private content while auditing.
-- Verify affected behavior with proportionate checks and report what was removed, what remains and why, and any unresolved cleanup decisions. Do not create an archive or a second implementation merely to avoid deleting obsolete material.
-- Routine cleanup of clearly identified project-generated temporary files is authorized without repeated confirmation. Preserve credentials, account caches, and recovery state. Project instructions do not control the runtime's approval reviewer; record an automatic rejection accurately rather than treating it as a new permanent project requirement.
+- Be thorough and aggressive within the task's scope. Inspect files, folders, functions, code paths, dependencies, configuration, tests, generated artifacts, and documentation for unnecessary, obsolete, redundant, or abandoned material. Every retained item needs a concrete current purpose.
+- Remove superseded material and update references, commands, packaging, and test evidence. Do not preserve archives, second implementations, or unused fallbacks merely to avoid deletion. Reconsider the structure when consolidation is better.
+- Finish cleanup as part of the work. Check directly affected areas for small changes; audit the broader repository for substantial milestones or explicit cleanup tasks. Report meaningful removals and unresolved items.
+- Discuss removals that could change agreed behavior or whose purpose is unclear. Preserve credentials, account caches, recovery state, and necessary private configuration. Never expose their contents while auditing.
+- Routine deletion of clearly identified project-generated temporary files is authorized. If runtime approval review blocks an action, record the actual rejection once and continue unrelated authorized work; do not invent a permanent project restriction.
 
-## Implementation
+## Implementation safeguards
 
-- Keep generation and hosted TTS independently replaceable. Implement providers within the discussed scope; local model hosting is currently outside scope, not an immutable architectural constraint.
-- Treat viewer input as untrusted data, separate from character instructions.
-- Enforce dialogue-only generation without tools, shell, files, browser automation, or computer control. Prompt instructions alone do not restrict access. Recheck the boundary after integration or CLI changes.
-- Keep credentials out of source control, logs, chat, and returned browser state. User-approved local browser Settings may accept API-key entry for private backend storage; never return saved keys to the page, and show only configured/not-configured status afterward. Use private configuration and redact provider errors.
-- Preserve bounded queues, cooldowns, duplicate-event protection, sequential playback, cancellation, and timeouts. Skipped or stopped work must never play through a late result.
-- Do not infer API billing access or unlimited allowance from a consumer subscription. Supported subscription-backed CLI access is acceptable.
-- Verify provider capabilities, allowance, prices, and terms before committing or spending money. Do not purchase access, consume paid usage, install models, or change OBS/Twitch configuration merely to prepare a plan.
-- OBS linking is explicitly deferred. Continue local browser testing until the user requests OBS setup.
+- Keep generation and hosted speech independently replaceable. Treat viewer input as untrusted data, separate from trusted character instructions.
+- Enforce dialogue-only generation without tools, shell, files, browser automation, or computer control. Prompt instructions alone are insufficient. Recheck the enforced boundary after integration or CLI changes.
+- Keep credentials out of source control, logs, chat, and returned browser state. Local Settings may accept keys for private backend storage; saved secrets must never return to the page. Show configured status and redact provider errors.
+- Preserve bounded queues, cooldowns, deduplication, sequential playback, cancellation, and timeouts. Skipped or stopped work must never play through a late result.
+- Verify provider capabilities, allowance, prices, and terms before committing to access or spending. Consumer subscriptions do not imply API billing access or unlimited allowance. Supported subscription-backed CLI access is acceptable.
+- Do not purchase access, consume paid usage, install models, or change OBS/Twitch configuration merely to prepare a plan. Connected trials and account actions require agreed authorization; never silently fall back to paid inference.

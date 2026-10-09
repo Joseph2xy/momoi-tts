@@ -1,4 +1,4 @@
-import type { PlayerState } from '../src/shared/protocol.ts';
+import type { PlayerState } from '../../src/shared/protocol.ts';
 
 export function startPlayback(onOwnership: (primary: boolean | null) => void) {
   const session = crypto.randomUUID();
