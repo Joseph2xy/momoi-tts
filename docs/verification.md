@@ -64,6 +64,32 @@ checks, not mobile pointer interaction evidence. Current/upcoming text uses boun
 previews; history text is complete. Direct resizing remains unverified. Snapshot
 capture failed, so this revision has no fresh screenshot-based visual verification.
 
+## UX direction prototypes
+
+On 2026-10-09, `prototype/ux-directions` passed strict server/browser TypeScript,
+the production build, and formatting of its new UI files. Production Vite inputs
+still contain only management and Testing; the comparison uses a separate
+development entrypoint. This was a synthetic UX review, not backend integration.
+
+T3 browser interactions verified variant switching and URL updates, pause/skip
+preserving hold state, stop-and-clear confirmation with initial focus on Cancel,
+sample response completion, full-flow queue insertion, rejection when the two
+waiting places are full, and saving a playback draft without changing live volume.
+The preview creates no audio element and makes no app/provider API calls. History
+search returned only its matching question and exposed no action buttons.
+Preparation navigation and in-memory personality draft saving were checked with
+DOM-dispatched events; this does not verify backend character persistence.
+
+Live same-origin iframe instances of A/B/C rendered Activity, preparation, and
+Soundcheck at 1280x800, 1024x768, 390x844, and 320x568 without horizontal overflow.
+Desktop Activity fits the viewport; A scrolls recent history and C scrolls the
+activity ledger. Mobile pages use vertical page scrolling. These are actual
+iframe layout checks, not direct mobile pointer testing. T3 direct resize timed
+out and snapshot capture failed. Native preview recording succeeded; recorded
+frames were used for visual review. No successful standalone screenshots were
+captured. Earlier production evidence above does not establish that proposed
+browser character editing or the new workflows are implemented.
+
 ## Packaging evidence
 
 The transfer package passed a fresh integration check: production React TSX files, public-state Query integration, component configuration, and the current browser folders are included. Prototype paths, private state, dependencies and generated output are excluded. PowerShell packaging syntax passed, and the temporary verification ZIP was deleted. Fresh destination-PC installation and actual prerequisite installation/sign-in were not exercised.

@@ -2,6 +2,8 @@
 
 A local Windows companion that turns a named character's question into dialogue and assigned-voice playback. Browser management is integrated; Twitch connection and OBS setup are deferred. Tyrone is the first file-based character. App naming and final model/voice refinement remain deferred.
 
+On `prototype/ux-directions`, `npm run prototype:ux` opens the development server for [three interactive UX proposals](http://127.0.0.1:3224/prototype.html?variant=A). Use the bottom arrows to compare, and the example selector to try busy, paused, empty, or failed states. Preparation and Soundcheck are simulated. [Design notes](web/management/prototype/DESIGN.md) explain the alternatives; no direction is selected or integrated yet.
+
 ## Run locally
 
 Use Node.js 24.12 or newer.
