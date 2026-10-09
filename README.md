@@ -65,11 +65,10 @@ The retained intake uses one shared `Name: question` reward, completion fulfillm
 ## Development
 
 On branch `prototype/activity-layouts`, run `npm run prototype:ui` and open
-[layout comparison](http://127.0.0.1:3222/prototype.html?variant=feed). The bottom
-switcher compares a transcript feed and a message list with a detail inspector, using
-shared sample messages. Skip, pause, mute and removal are simulated in memory;
-**Reset samples** restores the initial state. The feed shows responses directly;
-select an entry in the inspector variant to review its full question and response. Settings
+[message feed preview](http://127.0.0.1:3222/prototype.html). The review refines the
+preferred transcript-feed direction with an emphasized current reply, compact upcoming
+questions, and inline recent transcripts. Skip, pause, mute and removal are simulated
+in memory; **Reset samples** restores the initial state. Settings
 and actual playback are outside this review. No backend server, credentials or provider
 access is needed. The prototype page is excluded from the production Vite build.
 `npm run prototype:check` checks its React TypeScript code. Stop the review with Ctrl+C.

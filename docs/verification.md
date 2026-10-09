@@ -39,21 +39,22 @@ The organizational-pass review also loaded both built pages in the T3 collaborat
 ## Activity layout prototype evidence
 
 On 2026-10-09, branch `prototype/activity-layouts` passed the existing production build
-and strict server/browser TypeScript, plus `prototype:check` for the isolated React
-prototype. The production build includes only its existing management and testing pages.
+and strict server/browser TypeScript, plus `prototype:check`, formatting, and whitespace
+checks for the refined React prototype. The production build includes only its existing
+management and testing pages.
 
-T3 browser review loaded the transcript feed and list/detail variants and captured
-desktop screenshots. Interactions verified selection of waiting and completed entries,
-full question/response inspection, waiting-response exclusion, selected-entry removal
-and its updated outcome, pause, skip advancing the sample queue while preserving pause
-and independent history selection, state retention when switching variants, and reset.
-Remove buttons fit inside their list rows. Browser inspection found no audio element,
-nested buttons, or `/api/` resource requests. These are synthetic interactions, not live
-queue evidence. Build, prototype TypeScript, and formatting passed for these variants.
+T3 browser interaction checks for the refined transcript feed verified pause, skip
+advancing the sample queue while preserving pause, waiting-response exclusion,
+waiting removal and its updated history outcome, mute, exhausted-queue feedback,
+disabled skip without a current message, and reset. Playback/remove controls measure
+36px high. Browser inspection found no audio element, nested buttons, or `/api/`
+resource requests. These are synthetic interactions, not live queue evidence.
 
-Script-free DOM/stylesheet copies of both variants had no horizontal overflow at
-320, 390, and 600 CSS pixels; the inspector layout reduced to one column. Direct browser
-resizing remains unverified after earlier timeouts, so this is limited layout evidence.
+Script-free DOM/stylesheet copies had no horizontal overflow at 320, 390, 600, and
+1024 CSS pixels; remove controls fit within their rows. At 320px the transport wraps
+to two lines. This is limited layout evidence. Direct resizing remains unverified;
+snapshot capture failed for this revision, so it has no fresh screenshot-based visual
+verification.
 
 ## Packaging evidence
 

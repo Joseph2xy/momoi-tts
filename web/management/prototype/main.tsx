@@ -1,21 +1,9 @@
-// Throwaway review: a transcript feed versus a selectable list with an inspector.
-// Same charcoal/coral palette, compact Outfit heading, plain rows, fixed transport.
-// Feed: [controls] [current / waiting / previous transcripts].
-// Inspector: [controls] [selectable messages | one selected transcript].
-import { useEffect, useState } from 'react';
+// Throwaway review: one message feed, with a stronger current-response hierarchy.
+// Charcoal/coral, Outfit headings, plain queue rows, persistent playback controls.
+// [controls] [current transcript] [upcoming questions] [recent transcripts]
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import {
-  ArrowLeft,
-  ArrowRight,
-  AudioLines,
-  Pause,
-  Play,
-  Settings,
-  SkipForward,
-  Volume2,
-  VolumeX,
-  X,
-} from 'lucide-react';
+import { AudioLines, Pause, Play, Settings, SkipForward, Volume2, VolumeX, X } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Badge } from './components/ui/badge';
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from './components/ui/empty';
@@ -30,9 +18,7 @@ type Message = {
   time: string;
   outcome?: string;
 };
-type Variant = 'feed' | 'inspector';
 type Entry = Message & { kind: 'current' | 'waiting' | 'past'; status: string };
-const variants: Variant[] = ['feed', 'inspector'];
 const sampleCurrent: Message = {
   id: 1,
   viewer: 'pixelpilot',
@@ -87,12 +73,8 @@ const sampleHistory: Message[] = [
     outcome: 'Skipped',
   },
 ];
-function urlVariant(): Variant {
-  return new URLSearchParams(location.search).get('variant') === 'inspector' ? 'inspector' : 'feed';
-}
 type Model = {
   current: Message | null;
-  entries: Entry[];
   paused: boolean;
   muted: boolean;
   volume: number;
@@ -102,37 +84,15 @@ type Model = {
   setVolume: (n: number) => void;
   remove: (id: number) => void;
 };
-function Status({ entry }: { entry: Entry }) {
-  return (
-    <Badge
-      variant={
-        entry.kind === 'current' ? 'speaking' : entry.status === 'Answered' ? 'complete' : 'quiet'
-      }
-    >
-      {entry.kind === 'current' && entry.status === 'Speaking' ? (
-        <AudioLines aria-hidden="true" />
-      ) : null}
-      {entry.status}
-    </Badge>
-  );
-}
+
 function Controls({ model }: { model: Model }) {
   return (
     <header className="controls">
       <div className="title-row">
         <h1>Messages</h1>
-        <span className="playback-state">
-          {model.current
-            ? model.paused
-              ? 'Paused'
-              : 'Speaking'
-            : model.paused
-              ? 'Paused'
-              : 'Waiting for messages'}
-        </span>
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="icon"
           disabled
           title="Configuration is outside this prototype"
           aria-label="Settings (unavailable in prototype)"
@@ -141,23 +101,18 @@ function Controls({ model }: { model: Model }) {
         </Button>
       </div>
       <div className="transport">
-        <Button size="sm" onClick={model.skip} disabled={!model.current}>
+        <Button onClick={model.skip} disabled={!model.current}>
           <SkipForward data-icon="inline-start" />
           Skip current
         </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={model.togglePause}
-          aria-pressed={model.paused}
-        >
+        <Button variant="outline" onClick={model.togglePause} aria-pressed={model.paused}>
           {model.paused ? <Play data-icon="inline-start" /> : <Pause data-icon="inline-start" />}
           {model.paused ? 'Resume' : 'Pause'}
         </Button>
         <div className="volume">
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon"
             onClick={model.toggleMute}
             aria-pressed={model.muted}
             aria-label={model.muted ? 'Unmute' : 'Mute'}
@@ -176,271 +131,194 @@ function Controls({ model }: { model: Model }) {
             value={model.volume}
             onChange={(e) => model.setVolume(Number(e.target.value))}
           />
+          <span className="volume-value">{model.muted ? 'Muted' : model.volume + '%'}</span>
         </div>
-        <span className="transport-note">{model.muted ? 'Muted' : 'Audio in this tab'}</span>
       </div>
-      {model.current ? <progress max="32" value="12" aria-label="Sample speech progress" /> : null}
     </header>
   );
 }
-function Remove({ entry, model }: { entry: Entry; model: Model }) {
-  return entry.kind === 'waiting' ? (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      onClick={() => model.remove(entry.id)}
-      aria-label={`Remove question from ${entry.viewer}`}
-    >
-      <X data-icon="inline-start" />
-    </Button>
-  ) : null;
-}
-function Identity({ entry }: { entry: Entry }) {
+
+function Status({ entry }: { entry: Entry }) {
   return (
-    <span className="identity">
-      <span className="viewer">{entry.viewer}</span>
-      <span className="destination">to Tyrone</span>
-    </span>
+    <Badge variant={entry.kind === 'current' ? 'speaking' : 'quiet'}>
+      {entry.kind === 'current' && entry.status === 'Speaking' ? (
+        <AudioLines aria-hidden="true" />
+      ) : null}
+      {entry.status}
+    </Badge>
   );
 }
+
 function Transcript({ entry }: { entry: Entry }) {
   const hasResponse = entry.kind !== 'waiting' && !!entry.response;
   return (
     <div className="transcript">
-      <p className={cn('question', hasResponse && 'context-question')}>{entry.question}</p>
-      {hasResponse ? <p className="spoken-response">{entry.response}</p> : null}
+      <p className={cn('question', hasResponse && 'context-question')}>
+        <span className="viewer">{entry.viewer}</span>{' '}
+        <span className="question-text">{entry.question}</span>
+      </p>
+      {hasResponse ? (
+        <div className="response">
+          <span className="speaker">Tyrone</span>
+          <p className="spoken-response">{entry.response}</p>
+        </div>
+      ) : null}
     </div>
   );
 }
-function VariantA({ model }: { model: Model }) {
+
+function FeedEntry({ entry, model }: { entry: Entry; model: Model }) {
   return (
-    <div className="message-feed" aria-label="Message feed">
-      {model.entries.map((entry) => (
-        <article
-          className={cn('feed-entry', entry.kind === 'current' && 'current-entry')}
-          key={entry.id}
+    <article
+      className={cn('feed-entry', entry.kind + '-entry')}
+      aria-label={entry.status + ': ' + entry.viewer}
+    >
+      {entry.kind !== 'waiting' ? (
+        <div className="entry-meta">
+          <Status entry={entry} />
+          <time>{entry.time}</time>
+        </div>
+      ) : null}
+      {entry.kind === 'waiting' ? (
+        <div className="waiting-meta">
+          <Status entry={entry} />
+          <time>{entry.time}</time>
+        </div>
+      ) : null}
+      <Transcript entry={entry} />
+      {entry.kind === 'waiting' ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="remove"
+          onClick={() => model.remove(entry.id)}
+          title={'Remove question from ' + entry.viewer}
+          aria-label={'Remove question from ' + entry.viewer}
         >
-          <div className="entry-meta">
-            <Identity entry={entry} />
-            <Status entry={entry} />
-            <time>{entry.time}</time>
-            <Remove entry={entry} model={model} />
-          </div>
-          <Transcript entry={entry} />
-        </article>
-      ))}
-    </div>
+          <X data-icon="inline-start" />
+        </Button>
+      ) : null}
+    </article>
   );
 }
-function VariantB({
-  model,
-  selectedId,
-  select,
-}: {
-  model: Model;
-  selectedId: number | null;
-  select: (id: number) => void;
-}) {
-  const selected = model.entries.find((entry) => entry.id === selectedId) ?? model.entries[0];
-  return (
-    <div className="inspector-layout">
-      <div className="message-list" aria-label="Select a message">
-        {model.entries.map((entry) => (
-          <article
-            className={cn(
-              'list-entry',
-              entry.kind === 'current' && 'current-entry',
-              entry.id === selected?.id && 'selected-entry',
-            )}
-            key={entry.id}
-          >
-            <Button
-              variant="message"
-              size="message"
-              onClick={() => select(entry.id)}
-              aria-pressed={entry.id === selected?.id}
-              aria-label={`Review message from ${entry.viewer}`}
-              aria-controls="message-detail"
-            >
-              <span className="list-meta">
-                <Identity entry={entry} />
-                <Status entry={entry} />
-              </span>
-              <span className="message-preview">
-                {entry.kind !== 'waiting' && entry.response ? entry.response : entry.question}
-              </span>
-              <time>{entry.time}</time>
-            </Button>
-            <Remove entry={entry} model={model} />
-          </article>
-        ))}
-      </div>
-      <aside id="message-detail" className="inspector" aria-label="Selected message">
-        {selected ? (
-          <>
-            <div className="inspector-meta">
-              <Identity entry={selected} />
-              <Status entry={selected} />
-            </div>
-            <div className="detail-body">
-              {selected.kind !== 'waiting' && selected.response ? (
-                <>
-                  <p className="detail-label">Tyrone’s response</p>
-                  <p className="detail-response">{selected.response}</p>
-                  <p className="detail-label question-label">Viewer’s question</p>
-                  <p className="detail-question">{selected.question}</p>
-                </>
-              ) : (
-                <>
-                  <p className="detail-label">Viewer’s question</p>
-                  <p className="detail-response">{selected.question}</p>
-                  <p className="detail-note">
-                    {selected.kind === 'waiting'
-                      ? 'Waiting for a response.'
-                      : 'No response was completed.'}
-                  </p>
-                </>
-              )}
-              <time className="detail-time">{selected.time}</time>
-            </div>
-          </>
-        ) : null}
-      </aside>
-    </div>
-  );
-}
+
 function App() {
-  const [variant, setVariant] = useState(urlVariant);
-  const [current, setCurrent] = useState<Message | null>(sampleCurrent);
-  const [waiting, setWaiting] = useState(sampleWaiting);
-  const [history, setHistory] = useState(sampleHistory);
+  const [session, setSession] = useState({
+    current: sampleCurrent as Message | null,
+    waiting: sampleWaiting,
+    history: sampleHistory,
+  });
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(80);
-  const [selectedId, setSelectedId] = useState<number | null>(sampleCurrent.id);
   const [notice, setNotice] = useState('');
-  function choose(value: Variant) {
-    const url = new URL(location.href);
-    url.searchParams.set('variant', value);
-    window.history.replaceState(null, '', url);
-    setVariant(value);
-    setNotice('');
-  }
-  function cycle(step: number) {
-    choose(variants[(variants.indexOf(variant) + step + variants.length) % variants.length]!);
-  }
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest('input, textarea, select, button, [contenteditable]'))
-        return;
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        e.preventDefault();
-        cycle(e.key === 'ArrowLeft' ? -1 : 1);
-      }
-    };
-    const onBack = () => setVariant(urlVariant());
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('popstate', onBack);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('popstate', onBack);
-    };
-  }, [variant]);
-  const entries: Entry[] = [
-    ...(current
-      ? [{ ...current, kind: 'current' as const, status: paused ? 'Paused' : 'Speaking' }]
-      : []),
-    ...waiting.map((entry, i) => ({
-      ...entry,
-      kind: 'waiting' as const,
-      status: i === 0 ? 'Next' : 'Waiting',
-    })),
-    ...history.map((entry) => ({
-      ...entry,
-      kind: 'past' as const,
-      status: entry.outcome ?? 'Answered',
-    })),
-  ];
+  const { current, waiting, history } = session;
   const model: Model = {
     current,
-    entries,
     paused,
     muted,
     volume,
     setVolume,
     skip: () => {
-      if (!current) return;
-      setHistory((h) => [{ ...current, outcome: 'Skipped' }, ...h]);
-      setCurrent(waiting[0] ?? null);
-      setWaiting((q) => q.slice(1));
-      if (selectedId === current.id) setSelectedId(waiting[0]?.id ?? current.id);
-      setNotice('Skipped.');
+      setSession((s) =>
+        s.current
+          ? {
+              current: s.waiting[0] ?? null,
+              waiting: s.waiting.slice(1),
+              history: [{ ...s.current, outcome: 'Skipped' }, ...s.history],
+            }
+          : s,
+      );
+      setNotice('Current message skipped.');
     },
     togglePause: () => {
       setPaused((p) => !p);
-      setNotice(paused ? 'Resumed.' : 'Paused.');
+      setNotice(paused ? 'Playback resumed.' : 'Playback and queue paused.');
     },
     toggleMute: () => {
       setMuted((m) => !m);
-      setNotice(muted ? 'Unmuted.' : 'Muted.');
+      setNotice(muted ? 'Audio unmuted.' : 'Audio muted.');
     },
     remove: (id) => {
-      const removed = waiting.find((entry) => entry.id === id);
-      setWaiting((q) => q.filter((entry) => entry.id !== id));
-      if (removed) setHistory((h) => [{ ...removed, response: '', outcome: 'Removed' }, ...h]);
-      setNotice('Removed from the queue.');
+      setSession((s) => {
+        const removed = s.waiting.find((entry) => entry.id === id);
+        return removed
+          ? {
+              ...s,
+              waiting: s.waiting.filter((entry) => entry.id !== id),
+              history: [{ ...removed, response: '', outcome: 'Removed' }, ...s.history],
+            }
+          : s;
+      });
+      setNotice('Question removed from the queue.');
     },
   };
   function reset() {
-    setCurrent(sampleCurrent);
-    setWaiting(sampleWaiting);
-    setHistory(sampleHistory);
+    setSession({ current: sampleCurrent, waiting: sampleWaiting, history: sampleHistory });
     setPaused(false);
     setMuted(false);
     setVolume(80);
-    setSelectedId(sampleCurrent.id);
     setNotice('Samples reset.');
   }
   return (
     <>
       <div className="review-note">
-        <span>Prototype · Simulated messages, no audio</span>
+        <span>Design preview · Sample messages, no audio</span>
         <button onClick={reset}>Reset samples</button>
       </div>
-      <main className={cn('utility', variant === 'feed' ? 'feed-utility' : 'inspector-utility')}>
+      <main className="utility">
         <Controls model={model} />
-        {variant === 'feed' ? (
-          <VariantA model={model} />
-        ) : (
-          <VariantB model={model} selectedId={selectedId} select={setSelectedId} />
-        )}
-        {!current && !waiting.length ? (
-          <Empty>
-            <EmptyHeader>
-              <EmptyTitle>Queue clear</EmptyTitle>
-              <EmptyDescription>Recent messages stay available above.</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : null}
+        <div className="message-feed">
+          {current ? (
+            <FeedEntry
+              entry={{ ...current, kind: 'current', status: paused ? 'Paused' : 'Speaking' }}
+              model={model}
+            />
+          ) : (
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>{paused ? 'Playback paused' : 'All caught up'}</EmptyTitle>
+                <EmptyDescription>
+                  {paused
+                    ? 'Resume when you’re ready for the next message.'
+                    : 'New messages will appear here.'}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
+          {waiting.length ? (
+            <section className="upcoming" aria-labelledby="upcoming-heading">
+              <h2 id="upcoming-heading" className="feed-heading">
+                Up next
+              </h2>
+              {waiting.map((entry, i) => (
+                <FeedEntry
+                  key={entry.id}
+                  entry={{ ...entry, kind: 'waiting', status: i === 0 ? 'Next' : 'Waiting' }}
+                  model={model}
+                />
+              ))}
+            </section>
+          ) : null}
+          {history.length ? (
+            <section className="history" aria-labelledby="history-heading">
+              <h2 id="history-heading" className="feed-heading">
+                Earlier
+              </h2>
+              {history.map((entry) => (
+                <FeedEntry
+                  key={entry.id}
+                  entry={{ ...entry, kind: 'past', status: entry.outcome ?? 'Answered' }}
+                  model={model}
+                />
+              ))}
+            </section>
+          ) : null}
+        </div>
         <div className="footer-status" role="status">
-          {notice || 'Sample session'}
+          {notice}
         </div>
       </main>
-      {import.meta.env.DEV ? (
-        <nav className="switcher" aria-label="Compare layouts">
-          <button className="cycle" onClick={() => cycle(-1)} aria-label="Previous layout">
-            <ArrowLeft size={15} />
-          </button>
-          {variants.map((value, i) => (
-            <button key={value} onClick={() => choose(value)} aria-pressed={variant === value}>
-              {['A · Message feed', 'B · List & detail'][i]}
-            </button>
-          ))}
-          <button className="cycle" onClick={() => cycle(1)} aria-label="Next layout">
-            <ArrowRight size={15} />
-          </button>
-        </nav>
-      ) : null}
     </>
   );
 }

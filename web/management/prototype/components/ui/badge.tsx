@@ -17,7 +17,6 @@ const badgeVariants = cva(
         ghost: '[a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 [a&]:hover:underline',
         speaking: 'rounded-none border-0 bg-transparent px-0 text-primary',
-        complete: 'rounded-none border-0 bg-transparent px-0 text-success',
         quiet: 'rounded-none border-0 bg-transparent px-0 text-muted-foreground',
       },
     },
