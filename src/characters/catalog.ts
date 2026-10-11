@@ -6,7 +6,7 @@ import type { CharacterProfile } from './types.ts';
 // Trusted local configuration only; viewer input can never select a file or voice ID.
 export function readCharacters(
   env: NodeJS.ProcessEnv = {},
-  demo = false,
+  ignoreVoices = false,
   catalogUrl = new URL('../../characters/catalog.json', import.meta.url),
 ): readonly CharacterProfile[] {
   const invalid = () =>
@@ -49,9 +49,9 @@ export function readCharacters(
           throw invalid();
         const prompt = readFileSync(promptPath, 'utf8');
         if (!prompt.trim() || prompt.length > 8000) throw invalid();
-        const voiceId = demo ? undefined : env[entry.voiceIdEnv];
+        const voiceId = ignoreVoices ? undefined : env[entry.voiceIdEnv];
         if (
-          !demo &&
+          !ignoreVoices &&
           (env.FISH_API_KEY || voiceId) &&
           (!env.FISH_API_KEY ||
             /\s/u.test(env.FISH_API_KEY) ||

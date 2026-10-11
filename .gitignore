@@ -1,6 +1,5 @@
 .local/
 .generated/
-web/management/prototype/review.mp4
 node_modules/
 .env
 .env.*

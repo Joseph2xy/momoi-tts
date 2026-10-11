@@ -1,7 +1,8 @@
-import { testCharacters } from './fixtures.ts';
+import { memoryRedemptionStore, testCharacters } from './fixtures.ts';
 import assert from 'node:assert/strict';
+import { test } from 'node:test';
 import { once } from 'node:events';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -13,8 +14,8 @@ import {
   type TwitchTransportFactory,
 } from '../src/twitch/intake.ts';
 import { readTwitchConfig } from '../src/twitch/config.ts';
-import { parseSavedToken } from '../src/twitch/token-store.ts';
-import { fileRedemptionStore, memoryRedemptionStore } from '../src/twitch/redemption-store.ts';
+import { parseSavedToken, saveToken } from '../src/twitch/token-store.ts';
+import { fileRedemptionStore } from '../src/twitch/redemption-store.ts';
 import { createAppServer } from '../src/app/server.ts';
 import type { PlaybackState } from '../src/shared/protocol.ts';
 
@@ -24,6 +25,37 @@ const config = {
   rewardTitle: 'Ask Tyrone',
   rewardCost: 1000,
 };
+
+test('failed atomic Twitch writes remove temporary credential and journal files', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'momoitts-write-cleanup-'));
+  try {
+    // A directory at the destination makes rename fail after the temporary write.
+    const destination = path.join(root, 'blocked.json');
+    await mkdir(destination);
+    const file = pathToFileURL(destination);
+    await assert.rejects(
+      saveToken(
+        {
+          clientId: config.clientId,
+          userId: '123',
+          token: {
+            accessToken: 'dummy-access-token',
+            refreshToken: 'dummy-refresh-token',
+            scope: ['channel:manage:redemptions'],
+            expiresIn: 3600,
+            obtainmentTimestamp: Date.now(),
+          },
+        },
+        file,
+      ),
+    );
+    assert.deepEqual(await readdir(root), ['blocked.json']);
+    await assert.rejects(fileRedemptionStore(file).save('dummy-owner', []));
+    assert.deepEqual(await readdir(root), ['blocked.json']);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 assert.equal(readTwitchConfig({}), undefined);
 assert.equal(
   readTwitchConfig({ TWITCH_CLIENT_ID: config.clientId, TWITCH_CHANNEL: '#Lacari' })?.channel,
@@ -40,8 +72,13 @@ assert.throws(() =>
 assert.throws(() => parseSavedToken({ token: { accessToken: 'private-token' } }), /Invalid saved/u);
 const remote = new Map<string, string>();
 const calls: { id: string; target: string }[] = [];
+let live = true;
 let failUpdates = false;
 let rejectStatus: ((error: Error) => void) | undefined;
+let deferOutstanding = false;
+let releaseOutstanding: (() => void) | undefined;
+let deferLive = false;
+let releaseLive: ((live: boolean) => void) | undefined;
 const sessions: { callbacks: TwitchCallbacks; stopped: boolean; signal?: AbortSignal }[] = [];
 const factory: TwitchTransportFactory = (_config, callbacks) => {
   const session = { callbacks, stopped: false, signal: undefined as AbortSignal | undefined };
@@ -49,10 +86,17 @@ const factory: TwitchTransportFactory = (_config, callbacks) => {
   return {
     async start(signal) {
       session.signal = signal;
-      callbacks.connected('reward1');
+      callbacks.connected('reward1', live);
     },
     stop() {
       session.stopped = true;
+    },
+    async isLive() {
+      if (deferLive)
+        return new Promise<boolean>((resolve) => {
+          releaseLive = resolve;
+        });
+      return live;
     },
     async status(_reward, id) {
       if (id === 'stale-error')
@@ -62,6 +106,10 @@ const factory: TwitchTransportFactory = (_config, callbacks) => {
       return remote.get(id) ?? 'UNFULFILLED';
     },
     async outstanding() {
+      if (deferOutstanding)
+        await new Promise<void>((resolve) => {
+          releaseOutstanding = resolve;
+        });
       return [...remote]
         .filter(([, status]) => status === 'UNFULFILLED')
         .map(([id]) => ({ id, rewardId: 'reward1' }));
@@ -105,12 +153,12 @@ let now = Date.now();
 const queue = new RequestQueue({
   pipeline: {
     characters: testCharacters,
-    mode: 'demo',
+    mode: 'live',
     async generate() {
       return 'Reply';
     },
     async synthesize() {
-      return Buffer.from('ID3demo');
+      return Buffer.from('ID3fixture');
     },
   },
   playerReady: () => false,
@@ -210,6 +258,34 @@ intake.disconnect();
 intake.connect();
 rejectStatus!(new Error('dummy private upstream error'));
 await until(() => intake.snapshot().status === 'connected');
+// A socket gap invalidates reconciliation already awaiting a network response.
+const reconnectCallbacks = sessions.at(-1)!.callbacks;
+deferOutstanding = true;
+reconnectCallbacks.connected('reward1', true);
+await until(() => !!releaseOutstanding);
+reconnectCallbacks.reconnecting();
+releaseOutstanding!();
+await flush();
+assert.equal(intake.snapshot().status, 'reconnecting');
+assert.equal(intake.snapshot().live, null);
+deferOutstanding = false;
+reconnectCallbacks.connected('reward1', true);
+await until(() => intake.snapshot().status === 'connected');
+// An admission query started before a gap cannot revive live state or submit work.
+deferLive = true;
+remote.set('gap-admission', 'UNFULFILLED');
+reconnectCallbacks.redemption(event('gap-admission', 'gapviewer'));
+await until(() => !!releaseLive);
+reconnectCallbacks.reconnecting();
+releaseLive!(true);
+await flush();
+assert.equal(intake.snapshot().status, 'reconnecting');
+assert.equal(intake.snapshot().live, null);
+assert(!queue.snapshot().requests.some((entry) => entry.viewer === 'gapviewer'));
+deferLive = false;
+reconnectCallbacks.connected('reward1', true);
+await until(() => intake.snapshot().status === 'connected');
+assert.equal(remote.get('gap-admission'), 'CANCELED');
 intake.disconnect();
 
 // Completion, active cancellation, late results, restart recovery, and durable outbox.
@@ -223,7 +299,7 @@ try {
   const activeQueue = new RequestQueue({
     pipeline: {
       characters: testCharacters,
-      mode: 'demo',
+      mode: 'live',
       async generate() {
         return defer
           ? new Promise<string>((resolve) => {
@@ -232,7 +308,7 @@ try {
           : 'Reply';
       },
       async synthesize() {
-        return Buffer.from('ID3demo');
+        return Buffer.from('ID3fixture');
       },
     },
     playerReady: () => true,
@@ -304,7 +380,7 @@ try {
   await until(() => active.snapshot().status === 'connected');
   assert.equal(remote.get('disconnect-active'), 'CANCELED');
   active.disconnect();
-  activeQueue.stopAndClear();
+  activeQueue.setRepliesEnabled(false);
   assert.equal(calls.filter((call) => call.id === 'complete').length, 1);
 } finally {
   await rm(root, { recursive: true, force: true });
@@ -317,12 +393,12 @@ const server = createAppServer({
   redemptionStore: memoryRedemptionStore(),
   pipeline: {
     characters: testCharacters,
-    mode: 'demo',
+    mode: 'live',
     async generate(question) {
       return 'Reply to ' + question;
     },
     async synthesize() {
-      return Buffer.from('ID3demo');
+      return Buffer.from('ID3fixture');
     },
   },
 });
@@ -340,6 +416,12 @@ try {
     (await fetch(base + '/api/twitch/connect', { method: 'POST', body: '{}' })).status,
     403,
   );
+  await fetch(base + '/api/player/poll', {
+    method: 'POST',
+    headers: { Origin: base, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session: '12345678-1234-1234-1234-123456789012' }),
+  });
+  await post('/api/replies/on');
   await post('/api/twitch/connect');
   await until(() => sessions.at(-1)?.signal !== undefined);
   await flush();
@@ -353,7 +435,7 @@ try {
   assert(!publicState.includes('accessToken'));
   await post('/api/twitch/disconnect');
   await flush();
-  assert.equal((await state()).queue?.requests[0]?.status, 'removed');
+  assert.equal((await state()).queue?.requests[0]?.status, 'skipped');
 } finally {
   server.closeAllConnections();
   await new Promise<void>((resolve) => server.close(() => resolve()));

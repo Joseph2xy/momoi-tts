@@ -10,6 +10,8 @@ const badgeVariants = cva(
         speaking: 'border-primary/25 bg-primary/10 text-primary',
         error: 'border-destructive/25 bg-destructive/10 text-destructive',
         quiet: 'border-border bg-secondary text-muted-foreground',
+        warning: 'border-warning/35 bg-warning/15 text-warning',
+        success: 'border-success/25 bg-success/10 text-success',
       },
     },
     defaultVariants: {

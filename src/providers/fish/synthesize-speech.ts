@@ -1,7 +1,11 @@
+import { validateFishModel, type FishModel } from './config.ts';
+import { SpeechFailure } from '../../shared/errors.ts';
+
 interface SynthesizeSpeechInput {
   text: string;
   apiKey: string;
   voiceId: string;
+  model: string;
   signal?: AbortSignal;
   timeoutMs?: number;
 }
@@ -10,21 +14,23 @@ interface SpeechResult {
   audio: Buffer;
   format: 'mp3';
   provider: 'fish-audio';
-  model: 's2.1-pro-free';
+  model: FishModel;
   voiceId: string;
   inputBytes: number;
   firstAudioMs: number;
   elapsedMs: number;
 }
 
-// Request the configured free-model route only; never fall back to paid.
+// Request only the explicitly configured model; no application fallback.
 export async function synthesizeSpeech({
   text,
   apiKey,
   voiceId,
+  model,
   signal,
   timeoutMs = 45_000,
 }: SynthesizeSpeechInput): Promise<SpeechResult> {
+  validateFishModel(model);
   if (typeof text !== 'string' || !text.trim() || Buffer.byteLength(text, 'utf8') > 4000)
     throw new Error('Speech text must contain 1–4000 UTF-8 bytes.');
   if (typeof apiKey !== 'string' || !apiKey.trim() || /\s/u.test(apiKey))
@@ -46,7 +52,7 @@ export async function synthesizeSpeech({
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        model: 's2.1-pro-free',
+        model,
       },
       body: JSON.stringify({
         text,
@@ -58,24 +64,20 @@ export async function synthesizeSpeech({
     });
     combined.throwIfAborted();
     if (!response.ok) {
-      await response.body?.cancel();
-      const reason =
-        response.status === 401 || response.status === 403
-          ? 'Check API key and voice access.'
-          : response.status === 402
-            ? 'Free model access is unavailable; no paid fallback was attempted.'
-            : response.status === 429
-              ? 'Rate limit reached; try again later.'
-              : response.status === 404
-                ? 'Voice or endpoint unavailable.'
-                : 'Provider rejected the request.';
-      throw new Error(`Fish Audio HTTP ${response.status}: ${reason}`);
+      // Cleanup must not delay or replace the provider's known HTTP outcome.
+      void response.body?.cancel().catch(() => {});
+      throw new SpeechFailure('http', response.status);
     }
-    if (!response.body) throw new Error('Fish Audio returned no audio.');
+    if (!response.body) throw new SpeechFailure('empty');
     const reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
     let bytes = 0;
     let firstAudioMs: number | undefined;
+    const abort = () => {
+      void reader.cancel().catch(() => {});
+    };
+    combined.addEventListener('abort', abort, { once: true });
+    if (combined.aborted) abort();
     try {
       while (true) {
         const { value, done } = await reader.read();
@@ -84,13 +86,14 @@ export async function synthesizeSpeech({
         if (!value.length) continue;
         firstAudioMs ??= Math.round(performance.now() - started);
         bytes += value.length;
-        if (bytes > 5_000_000) throw new Error('Speech audio exceeded the 5 MB limit.');
+        if (bytes > 5_000_000) throw new SpeechFailure('audio-too-large');
         chunks.push(value);
       }
     } catch (error) {
-      await reader.cancel().catch(() => {});
+      void reader.cancel().catch(() => {});
       throw error;
     } finally {
+      combined.removeEventListener('abort', abort);
       reader.releaseLock();
     }
     combined.throwIfAborted();
@@ -99,13 +102,12 @@ export async function synthesizeSpeech({
     const mp3 =
       audio.subarray(0, 3).toString('ascii') === 'ID3' ||
       (audio.length >= 2 && audio[0] === 0xff && ((audio[1] ?? 0) & 0xe0) === 0xe0);
-    if (!mp3 || firstAudioMs === undefined)
-      throw new Error('Fish Audio returned invalid MP3 audio.');
+    if (!mp3 || firstAudioMs === undefined) throw new SpeechFailure('invalid-audio');
     return {
       audio,
       format: 'mp3',
       provider: 'fish-audio',
-      model: 's2.1-pro-free',
+      model,
       voiceId,
       inputBytes: Buffer.byteLength(text, 'utf8'),
       firstAudioMs,
@@ -113,9 +115,9 @@ export async function synthesizeSpeech({
     };
   } catch (error) {
     if (signal?.aborted) throw new Error('Speech cancelled.');
-    if (controller.signal.aborted) throw new Error('Speech timed out.');
-    if (error instanceof Error && /^(Fish Audio |Speech audio )/u.test(error.message)) throw error;
-    throw new Error('Fish Audio request failed. Check your connection and API access.');
+    if (controller.signal.aborted) throw new SpeechFailure('timeout');
+    if (error instanceof SpeechFailure) throw error;
+    throw new SpeechFailure('network');
   } finally {
     clearTimeout(timer);
   }

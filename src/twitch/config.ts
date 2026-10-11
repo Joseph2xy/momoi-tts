@@ -17,7 +17,7 @@ export function readTwitchConfig(env: NodeJS.ProcessEnv): TwitchConfig | undefin
     !/^[a-z0-9_]{1,25}$/u.test(channel)
   )
     throw new Error('Set a valid TWITCH_CLIENT_ID and TWITCH_CHANNEL in private configuration.');
-  const rewardTitle = env.TWITCH_REWARD_TITLE?.trim() ?? 'Ask Tyrone';
+  const rewardTitle = env.TWITCH_REWARD_TITLE?.trim() ?? 'Ask a character';
   const rewardCost = Number(env.TWITCH_REWARD_COST ?? '1000');
   if (!rewardTitle || rewardTitle.length > 45 || /\p{Cc}/u.test(rewardTitle))
     throw new Error('Reward title must contain 1–45 characters.');

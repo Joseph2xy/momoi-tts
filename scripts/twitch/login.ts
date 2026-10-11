@@ -1,7 +1,8 @@
 import { startDeviceCodeFlow, exchangeDeviceCode, getTokenInfo } from '@twurple/auth';
 import { setTimeout as delay } from 'node:timers/promises';
-import { readTwitchConfig, redemptionScope } from '../../src/twitch/config.ts';
-import { saveToken } from '../../src/twitch/token-store.ts';
+import { redemptionScope } from '../../src/twitch/config.ts';
+import { readTwitchConfig } from '../../src/twitch/config.ts';
+import { saveToken, tokenFile } from '../../src/twitch/token-store.ts';
 
 const scopes = [redemptionScope];
 const controller = new AbortController();
@@ -25,7 +26,9 @@ async function bounded<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 try {
+  if (process.argv.length > 2) throw new Error('Unknown setup option.');
   const config = readTwitchConfig(process.env);
+  const file = tokenFile;
   if (!config) throw new Error('Missing Twitch configuration.');
   const device = await bounded(() => startDeviceCodeFlow(config.clientId, scopes));
   controller.signal.throwIfAborted();
@@ -55,9 +58,9 @@ try {
         !info.scopes.includes(redemptionScope)
       )
         throw new Error('Invalid authorization.');
-      await saveToken({ clientId: config.clientId, userId: info.userId, token });
+      await saveToken({ clientId: config.clientId, userId: info.userId, token }, file);
       console.log(
-        'Broadcaster sign-in saved privately. Run npm run twitch:reward once to create the reward, then connect in the app.',
+        'Broadcaster sign-in saved privately. Run the explicit reward setup command, then Connect in management.',
       );
       authorized = true;
     } catch (error) {

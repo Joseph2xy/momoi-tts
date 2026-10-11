@@ -4,28 +4,39 @@ import { once } from 'node:events';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomBytes } from 'node:crypto';
-import { stat } from 'node:fs/promises';
+import { access, readdir, stat, unlink } from 'node:fs/promises';
+import { ensureBrowserBuild } from '../scripts/build/browser.ts';
 import { createAppServer } from '../src/app/server.ts';
-import { configurationProof, readConfig } from '../src/app/config.ts';
+import { SettingsStore } from '../src/app/settings.ts';
 
 const run = promisify(execFile);
+// Shared chunks and fonts are indirect dependencies, absent from HTML asset links.
+await ensureBrowserBuild();
+assert.equal(await ensureBrowserBuild(), false);
+const assetRoot = new URL('../.generated/web/assets/', import.meta.url);
+const font = (await readdir(assetRoot)).find((name) => name.endsWith('.woff2'));
+assert(font, 'The browser build must include a local font.');
+await unlink(new URL(font, assetRoot));
+assert.equal(await ensureBrowserBuild(), true, 'Missing indirect assets must rebuild.');
+await access(new URL(font, assetRoot));
+assert.equal(await ensureBrowserBuild(), false);
 // Explicit dummy settings override private environment files in the spawned processes.
 const env: NodeJS.ProcessEnv = {
   ...process.env,
-  TYRONE_TEXT_PROVIDER: 'openrouter',
+  MOMOI_TTS_TEXT_PROVIDER: 'openrouter',
   OPENROUTER_API_KEY: 'dummy-launch-key',
   OPENROUTER_MODEL: 'test/model-a:free',
   OPENROUTER_MAX_TOKENS: '1024',
   FISH_API_KEY: 'dummy-fish-key',
+  FISH_MODEL: 's2.1-pro',
   FISH_VOICE_ID: '0123456789abcdef0123456789abcdef',
   TWITCH_CLIENT_ID: '',
   TWITCH_CHANNEL: '',
-  TYRONE_CODEX_BIN: '',
-  TYRONE_VIEWER_COOLDOWN_MS: '10000',
-  TYRONE_GLOBAL_COOLDOWN_MS: '1000',
-  TYRONE_WAITING_EXPIRY_MS: '180000',
+  MOMOI_TTS_VIEWER_COOLDOWN_MS: '10000',
+  MOMOI_TTS_GLOBAL_COOLDOWN_MS: '1000',
+  MOMOI_TTS_WAITING_EXPIRY_MS: '180000',
 };
-let config: ReturnType<typeof readConfig>;
+let config: SettingsStore;
 const server = createAppServer({
   pipeline: {
     characters: testCharacters,
@@ -37,7 +48,7 @@ const server = createAppServer({
       throw new Error('No speech in launcher tests.');
     },
   },
-  configurationProof: (nonce) => configurationProof(config, nonce),
+  configurationProof: (nonce) => config.proof(nonce),
 });
 const root = new URL('../', import.meta.url);
 try {
@@ -45,16 +56,16 @@ try {
   await once(server, 'listening');
   const address = server.address();
   assert(address && typeof address !== 'string');
-  env.TYRONE_PLAYBACK_PORT = String(address.port);
-  config = readConfig(env, []);
+  env.MOMOI_TTS_PLAYBACK_PORT = String(address.port);
+  config = new SettingsStore({ env });
   const base = `http://127.0.0.1:${address.port}`;
   const plain = await (await fetch(`${base}/api/health`)).json();
-  assert.deepEqual(plain, { app: 'tyrone', mode: 'live' });
+  assert.deepEqual(plain, { app: 'momoitts', mode: 'live' });
   const nonce = randomBytes(32).toString('hex');
   const challenged = await (
-    await fetch(`${base}/api/health`, { headers: { 'X-Tyrone-Launch-Nonce': nonce } })
+    await fetch(`${base}/api/health`, { headers: { 'X-MomoiTTS-Launch-Nonce': nonce } })
   ).json();
-  assert.equal(challenged.configurationProof, configurationProof(config, nonce));
+  assert.equal(challenged.configurationProof, config.proof(nonce));
   assert(!JSON.stringify(challenged).includes('dummy'));
   assert(!JSON.stringify(challenged).includes('model-a'));
   const launcher = (overrides: NodeJS.ProcessEnv = {}) =>
@@ -64,12 +75,11 @@ try {
       windowsHide: true,
       timeout: 15_000,
     });
-  assert((await launcher()).stdout.includes('Tyrone ready'));
+  assert((await launcher()).stdout.includes('MomoiTTS ready'));
   for (const change of [
     { OPENROUTER_MODEL: 'test/model-b:free' },
     { OPENROUTER_API_KEY: 'different-dummy-key' },
     { OPENROUTER_MAX_TOKENS: '2048' },
-    { TYRONE_TEXT_PROVIDER: 'codex' },
     { FISH_VOICE_ID: 'abcdef0123456789abcdef0123456789' },
   ]) {
     await assert.rejects(launcher(change), (error) => {
@@ -93,14 +103,14 @@ const cold = await run(process.execPath, ['scripts/launch/launch.ts', '--no-open
   windowsHide: true,
   timeout: 20_000,
 });
-const base = `http://127.0.0.1:${env.TYRONE_PLAYBACK_PORT}`;
+const base = `http://127.0.0.1:${env.MOMOI_TTS_PLAYBACK_PORT}`;
 try {
-  assert(cold.stdout.includes('Tyrone ready'));
+  assert(cold.stdout.includes('MomoiTTS ready'));
   const nonce = randomBytes(32).toString('hex');
   const health = await (
-    await fetch(`${base}/api/health`, { headers: { 'X-Tyrone-Launch-Nonce': nonce } })
+    await fetch(`${base}/api/health`, { headers: { 'X-MomoiTTS-Launch-Nonce': nonce } })
   ).json();
-  assert.equal(health.configurationProof, configurationProof(readConfig(env, []), nonce));
+  assert.equal(health.configurationProof, new SettingsStore({ env }).proof(nonce));
   const state = await (await fetch(`${base}/api/state`)).json();
   assert.equal(state.queue.mode, 'live');
   assert.equal(state.queue.requests.length, 0);
@@ -114,7 +124,7 @@ try {
     windowsHide: true,
     timeout: 15_000,
   });
-  assert(reused.stdout.includes('Tyrone ready'));
+  assert(reused.stdout.includes('MomoiTTS ready'));
   assert.equal((await stat(browserIndex)).mtimeMs, beforeReuse);
   // Exercise the real bounded restart helper without opening a browser or sending requests.
   await fetch(`${base}/api/settings`, {
@@ -135,7 +145,12 @@ try {
       const next = await (
         await fetch(`${base}/api/state`, { signal: AbortSignal.timeout(500) })
       ).json();
-      if (next.queue.paused && next.queue.requests.length === 0 && next.management && !next.muted) {
+      if (
+        !next.queue.repliesEnabled &&
+        next.queue.requests.length === 0 &&
+        next.management &&
+        !next.muted
+      ) {
         restarted = true;
         break;
       }
@@ -143,7 +158,10 @@ try {
       /* Server closes before the launcher starts its replacement. */
     }
   }
-  assert(restarted, 'Restart must reopen a paused local server within the bounded handoff.');
+  assert(
+    restarted,
+    'Restart must reopen a local server with replies off within the bounded handoff.',
+  );
 } finally {
   await fetch(`${base}/api/app/quit`, {
     method: 'POST',

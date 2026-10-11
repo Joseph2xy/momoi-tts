@@ -1,60 +1,89 @@
-# Code structure
+# MomoiTTS architecture
 
-One local Node/TypeScript application serves browser management and a separate testing page. Generation and hosted speech use independent adapters. This describes the current implementation; alternatives remain open to evaluation.
+A local Node/TypeScript application serves setup/management, explicit real provider checks and a transparent OBS audio player. Generation and hosted speech are independently replaceable. Twitch EventSub intake, the bounded request lifecycle and durable settlement share one owner; OBS owns routing and mixing.
 
 ## File ownership
 
 | Location | Responsibility |
 | --- | --- |
-| `src/app/` | Application composition and lifetime; settings persistence and explicit provider actions have separate modules |
-| `src/characters/`, `characters/` | Trusted catalog loading, viewer name selection, file-based prompts |
-| `src/queue/` | Admission, bounds, cooldowns, deduplication, lifecycle, cancellation, read-only history |
-| `src/playback/` | Audio-owner lease, current clip, holds, progress and acknowledgements |
-| `src/providers/` | Dialogue validation and independent OpenRouter, Codex and Fish adapters |
-| `src/twitch/` | Retained redemption transport, rewards, private tokens/outcome journal for later integration |
-| `src/server/` | HTTP validation, loopback/same-origin restrictions, audio/static delivery |
-| `src/shared/` | Safe browser/server contracts and input errors |
-| `web/management/` | Management entrypoint, navigation, settings drafts, activity feed and playback controls |
-| `web/testing/` | Independent testing-page entrypoint |
-| `web/playback/` | Audio ownership and playback lifecycle |
-| `web/shared/` | Browser DOM helpers |
-| `web/index.html`, `web/testing.html` | Vite page entrypoints, served at / and /testing |
-| `config/examples/` | Public provider/Twitch templates |
-| `scripts/launch/`, `scripts/windows/` | Bounded start/reuse/restart helpers and prerequisite bootstrap |
-| `scripts/build/` | Browser build reuse and public transfer packaging |
-| `scripts/twitch/`, `scripts/auditions/` | Explicit later account/reward setup and provider auditions |
-| `tests/` | Offline behavior, synthetic providers and actual SDK/CLI checks with local mocks |
-| `.local/` | Ignored private configuration, account/recovery state and launcher logs |
-| `.generated/` | Ignored builds, packages, auditions and check output |
+| `src/app/` | Runtime composition, configuration persistence, provider actions and lifetime. |
+| `src/characters/`, `characters/` | Trusted catalog profiles, private prompt/voice edits and strict viewer name selection. |
+| `src/queue/`, `src/playback/` | Admission, bounds, cancellation, sequential playback and audio-owner lease. |
+| `src/providers/` | Dialogue validation, OpenRouter generation and Fish speech. |
+| `src/twitch/` | EventSub intake, explicit reward setup, private tokens and settlement journal. |
+| `src/server/`, `src/shared/` | Validated HTTP delivery and safe browser contracts. |
+| `web/management/`, `web/playback/` | Setup/activity, independent provider previews and textless queued audio output. |
+| `web/shared/` | Public-state polling and serialized commands. |
+| `scripts/launch/`, `scripts/windows/` | Background start/reuse/restart and prerequisite bootstrap. |
+| `scripts/build/` | Development browser build and prebuilt product generation/packaging. |
+| `scripts/twitch/` | Explicit broadcaster authorization and app-owned reward setup. |
+| `tests/` | Offline fixtures, mocked transports/providers. |
+| `.local/` | Ignored private settings, account/recovery state, Q/A logs and diagnostics. |
+| `.generated/` | Ignored development builds, product staging, packages and check output. |
 
-## Settings and startup
+## Setup and configuration
 
-`SettingsStore` reads `.local/generation.env`, `.local/fish.env` and `.local/app.json` (setup progress and launch-volume default), keeping inherited environment overrides distinct from saved values. Fixed section schemas validate before atomic writes and preserve unrelated env-file entries. Browser state exposes configured status, safe metadata and generic errors; saved API keys, voice IDs and prompts never return to the page. Blank replacements retain secrets. Save makes no provider calls.
+`SettingsStore` reads fixed `.local/generation.env`, `fish.env`, `twitch.env` and `app.json` paths. Inherited environment overrides remain separate from saved values. Section schemas validate before atomic writes and preserve unrelated private entries. `.local/characters.json` stores prompt/voice overrides for existing trusted catalog IDs. Blank API-key replacements retain saved values; explicit confirmed removal deletes only the section’s key and rejects inherited-key removal; ordinary public state exposes configured status and safe model metadata, never saved keys or prompt/voice details. A dedicated local character-editor operation returns the selected character's effective prompt and voice for authorized editing; these details do not enter status polling or player payloads. Save makes no network request.
 
-`src/app/main.ts` starts management with missing provider configuration. New unconfigured management does not implicitly select a provider. Full local requests are gated on generation, speech and character configuration; independent tests have their own prerequisites. Essential failures, such as an invalid listening port, still prevent startup. Normal/demo startup deliberately does not connect Twitch in this milestone.
+Generation selection is explicit. Speech requires a Fish API key and assigned voices. S2.1 Pro Free is the default only when no engine is saved or inherited; existing explicit selections are preserved. Backend validation and the browser selector share one Fish model list/default. Omitting the engine during a speech save retains the effective engine. Supported Fish engine changes use Settings without changing the adapter; a future speech-provider replacement remains contained by the speech boundary. Missing provider settings permit setup to open; full requests remain gated. Setup remains discoverable while local configuration is incomplete. Twitch configuration and account actions remain assisted through private templates and terminal helpers. No browser-driven account sign-in or automatic reward creation is implemented.
 
-`src/app/runtime.ts` owns the playback session, queue, management operations and expiry. `app/server.ts` binds runtime to HTTP and disposes it when closed. The HTTP layer validates commands and delegates; it constructs no providers or queue. Routes accept fixed settings sections/actions, never arbitrary commands or paths. `src/app/provider-actions.ts` composes configured pipelines and runs explicit response/voice tests and account checks from settings snapshots. The settings store owns validation, persistence, profiles and safe public metadata; it makes no network requests. Account checks use read-only provider endpoints and redact responses; Codex has one local prerequisite check establishing only executable/version availability.
+`SettingsStore` is the single startup/proof configuration owner. A fresh HMAC challenge uses relevant effective application settings, the private root and validated character snapshot, excluding unrelated inherited variables. Matching launchers reuse the service; mismatches require explicit shutdown/relaunch. Effective profile prompts/voices and private edits affect the proof. Private development environment names use `MOMOI_TTS_*`; old Tyrone application-prefix settings are not supported.
 
-The testing page contains full-request, response-only and fixed-phrase voice tests and never owns audio. Settings links to the relevant mode. `web/management/style.css` owns the charcoal/peach theme, local Outfit font, Activity layout and management forms; `web/testing/style.css` adapts it for the independent testing page.
+Normal startup has replies off and makes no inference request. Twitch connects only after the saved Connect choice. Shutdown/restart does not change saved Twitch intent. Restart cancels queued work, waits a bounded time for the old port to close, starts the same real application and returns with replies off.
 
-`web/management/main.ts` coordinates the persistent React Activity root, settings controller and application actions. `activity.tsx` renders server-backed controls and compact current/upcoming/history rows; only history scrolls. Selection stores a request ID and derives the inspected entry from fresh public state. A Radix dialog provides read-only question/reply inspection, focus containment and Escape dismissal; closing restores focus to the originating row, or Pause/Resume if the row disappeared. History has no replay or queue commands. A Radix menu houses batch queue controls. `server-state.ts` uses TanStack Query's core observer to poll only public state. Commands are serialized, uncached and never retried; they cancel outstanding GETs before writing, and departure aborts requests. Secret replacements never enter a mutation cache. `settings.ts` retains persistent DOM forms and draft/save race handling; `navigation.ts` switches sections without disposing playback or drafts. Per-section saves/Discard, beforeunload warnings, and pending settings are separate from explicit checks/tests. Application houses checklist, deferred Twitch information, diagnostics, profile refresh, testing entrypoint, restart and shutdown. Windows setup provides Node/dependency bootstrap.
+## Management interface
 
-## Request and playback boundaries
+Management uses React with shadcn components, Tailwind layouts and shared semantic theme tokens. A responsive sidebar frames Activity, a configuration-aware setup overview, separate Generation/Speech/OBS/Twitch settings and Characters. Activity loads as a separate browser chunk; it combines the current conversation, waiting queue and attached transport controls, with compact history below. The character list opens a detail editor; generation setup presents the OpenRouter key before choosing its model, with a deliberate Save action. Fish uses its agreed default with the engine selector in the regular configuration form. App options houses setup, a separate Diagnostics dialog and restart/shutdown confirmations. OBS is the recommended stream-mix volume control, with no separate playback settings page. The existing application volume capability and saved launch default remain supported.
 
-Testing requests enter the bounded queue as `Name: question`. Selection resolves trusted catalog names; missing/unknown names fail before provider dispatch. Viewer input cannot choose files, providers, voice IDs or executables. Accepted work retains its character identity/prompt. At processing start, the queue pins one pipeline for both generation and speech and resolves the selected character's current assigned voice. Active work keeps its original pipeline; pending work uses the replacement before starting. Fixed voice-test pipelines are constructed by trusted runtime code only.
+Settings places a plain Back button at the top-left of detail screens and uses shared semantic feedback banners. Bounded shadcn dialogs centralize testing: generation returns dialogue with an optional trusted catalog prompt; speech accepts a voice ID/phrase or loads an explicitly selected character’s assigned voice through the private editor endpoint and plays a transient browser preview. Neither depends on player connectivity, queue state or complete character configuration. OBS output sends a fixed speech-only OBS output test through the queue. Its identity and cancel action survive topic/dialog navigation. There is no separate full-pipeline test interface; `/testing` redirects to Settings. README owns user interactions.
 
-The queue imports no provider implementation. `pipeline.ts` binds generate/synthesize adapters. Slots remain occupied through acknowledged playback. Skip/stop/deadline invalidates late results. History is bounded and read-only; only current audio is retained, with no replay API/cache.
+## Runtime and provider boundaries
 
-One audio-owner lease governs playback. `web/playback/player.ts` owns the audio element independently of page rendering; secondary tabs remain silent. `/testing` submits and polls without playback ownership. Closing/refreshing the owner cancels active work and pauses. Reopening requires Resume. Intentional holds exclude paused time from watchdogs; owner/clip identity gates progress and completion.
+`AppRuntime` owns queue/session expiry, management actions and integration composition. Twitch configuration validates independently: invalid settings disable its transport and expose a fixed repair message, without blocking management or provider previews. Private files remain unchanged. The server binds runtime to HTTP and disposes it on close or startup error. HTTP routes accept fixed schemas/actions, never arbitrary commands or paths. Connection checks and direct provider tests share one bounded action slot, independent of live queue processing; connection fetches have a 10-second timeout and previews a 45-second lifetime. Quit, restart, disposal, HTTP client departure and successful provider/character saves abort the request; late transport results are ignored. Inputs are bounded to 1000 characters/4000 UTF-8 bytes. Speech previews return bounded MP3 bytes with no-store headers; transient blob URLs are revoked on replacement/departure.
 
-OpenRouter uses one exact model with separate trusted/viewer messages, no tools/plugins/executor, no fallback and temporary zero-price caps. Output validation rejects tool calls, malformed, empty, incomplete or overlength dialogue. Codex uses guarded CLI 0.162.0 with executors disabled; prompt instructions alone are not the boundary. Private CLI path overrides remain supported. Generation and hosted speech are independently replaceable.
+The HTTP security policy restricts scripts and connections to local assets, disallows framing and permits inline styles required by Radix dialogs/selectors. Trusted widget styles control scrolling; the UI renders viewer text through React without HTML interpolation.
 
-## Launch and retained Twitch boundaries
+Viewer input is untrusted `Name: question` data. Names resolve only trusted catalog entries; viewers cannot choose files, executables, providers or voice IDs. Accepted work retains immutable character identity/prompt. Processing pins one pipeline for generation, speech model and assigned voice. Active requests retain it; waiting requests use replacement configuration before starting. Every character needs a valid voice before full requests are enabled.
 
-Launcher reuse uses a fresh HMAC challenge over effective configuration without exposing settings or stable credential hashes. Browser saves update the proof. Mismatches require explicit shutdown/relaunch; no existing work is silently stopped. Explicit restart cancels/clears work, waits a bounded time for the old port to close, then starts through the normal launcher and returns paused. The server port is a developer environment setting read before launch; saved playback volume is a launch default.
+OpenRouter uses one exact model ID, separated trusted/viewer messages, no tools/plugins/executor and no fallback routing. Recipient-selected paid or free models are permitted; the development zero-price cap is removed. Token/output limits, cancellation, body bounds and rejection of tool calls, incomplete or overlength dialogue remain enforced. Fish validates its engine against the supported API enum so misspelled IDs cannot trigger provider default substitution. Neither saving nor startup dispatches generation/speech.
 
-Windows bootstrap offers Node/dependency actions when startup is blocked. Codex installation/sign-in are prepared externally; the app only checks the local guarded version. No browser-supplied shell text is executed. Build reuse fingerprints production inputs. Packaging uses a public-file allowlist and rejects links, excluding private state, dependencies and generated output. README supplies packaged setup instructions.
+Generation supports only explicit OpenRouter configuration. Unsupported retained provider selections are unconfigured and cannot silently route to API inference. No local executable, executor, browser/computer control or tool adapter is part of generation. The generation/speech composition boundary remains independently replaceable.
 
-Twurple transport/intake is covered by mocks and disconnected from the current entrypoint. Explicit reward setup owns creation. Intake bounds/deduplicates work, handles moderator outcomes, and settles completion/refunds using a private durable journal without replaying old requests. A crash between completed playback and durable settlement can refund a just-played response. Agreed Twitch scope and unresolved policies live in the handoff.
+There are no product demo/rehearsal modes or synthetic audio. Offline tests inject test pipelines/transports; those fixtures do not ship. Generation/speech previews and OBS output checks consume the configured account's allowance only through deliberate actions. The OBS test bypasses generation using a fixed phrase, retains a pinned speech configuration and cancels only its tracked request identity.
 
-[Commands](../README.md) · [Evidence](verification.md) · [Decisions](../PROJECT_HANDOFF.md)
+## Queue, playback and persistence
+
+The queue imports no provider implementation. Slots remain occupied until playback acknowledgement. Cooldowns, deduplication, expiry, deadlines and history are bounded. Skip/stop/departure invalidates late results. Terminal jobs release ownership before completion callbacks; cancellation and expiry detach their batches before notification so reentrant callbacks cannot double-finalize jobs or mutate an unfinished traversal. Only current audio is retained; there is no replay API/cache.
+
+Speech failures use typed application-owned diagnostics so Activity and private outcome logs can retain HTTP status and fixed actionable reasons. Provider response bodies and arbitrary exception text are discarded; unknown failures remain generic. Failed speech never creates playable audio or retries automatically.
+
+The transparent player renders no text or controls, including errors. Only one lease owns queued audio; duplicate players remain silent. Direct Settings speech previews use an independent browser audio element and never acquire that lease. Refresh/disconnect of the queued player cancels all unfinished work and turns replies off; reopening requires explicit turn-on. There is no held speech or playback pause state. Replies off rejects admission and cancels current/waiting work; turn-on accepts fresh work. Skip preserves the replies setting. Twitch refunds rejected requests and cancels unfinished redemptions on stream end, without private policy overrides. Owner/clip identity gates progress and completion.
+
+The private dialogue logger appends and flushes JSONL synchronously without unbounded memory buffering. Errors are generic and sticky for the session, and cannot block cancellation or points settlement. Logs are private review records, never HTTP-served, used for replay or sent back into generation. README owns contents and retention behavior.
+
+Twurple transport establishes current live state on connection and checks before admission. Newer stream notifications take precedence over stale in-flight queries. Reconnect gaps make live state unknown, cancel unfinished Twitch work and reconcile outstanding redemptions without replay. Only the app-created reward may be settled. Authorization uses the existing device-code flow and privately saved refreshable tokens. A crash between completed playback and durable settlement may refund a just-played reply.
+
+
+## Product distribution and development
+
+The product ZIP contains prebuilt JavaScript/runtime browser assets, characters, public configuration templates, required launch/setup/account helpers, runtime dependency manifest/lock, third-party notices and the user guide. Development source, tests, compiler/browser build tools, project handoff/evidence and demo artifacts do not belong in the delivered product. Node and pinned runtime dependencies remain one-time assisted prerequisites. Source and emitted JavaScript helpers preserve matching resource paths.
+
+Packaging uses explicit public inputs and rejects links/private state. It stages archives and publishes only after successful completion; failure removes staging. Development build reuse fingerprints production inputs and complete generated assets, including indirect chunks/fonts. Build subprocess and readiness waits are bounded.
+
+From the source repository:
+
+```powershell
+npm ci
+npm run build
+npm run test:offline
+npm run format:check
+npm run package
+```
+
+`test:offline` aliases `npm test`; both build the browser and run all local mock/fixture tests without account access, CLI probes or inference. For development, run `dev:browser` and `dev:server` separately; restarts reset queued work. Verification owns current results, not inferred success from command availability.
+
+## Open decisions
+
+[Audit conclusions](audit.md#product-gaps-and-decisions) own product gaps and proposed changes. [Handoff](../PROJECT_HANDOFF.md) owns pending user decisions and blockers. Measurements and recipient validation are required before changing intake policy, logging durability or stream playback coordination.
+
+[User guide](../README.md) · [Evidence](verification.md) · [Audit conclusions](audit.md) · [Scope and blockers](../PROJECT_HANDOFF.md)

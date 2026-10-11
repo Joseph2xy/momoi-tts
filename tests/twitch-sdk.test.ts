@@ -1,4 +1,4 @@
-import { testCharacters } from './fixtures.ts';
+import { memoryRedemptionStore, testCharacters } from './fixtures.ts';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -12,7 +12,6 @@ import { RefreshingAuthProvider } from '@twurple/auth';
 import { saveToken, loadToken } from '../src/twitch/token-store.ts';
 import { twurpleTransport } from '../src/twitch/transport.ts';
 import { TwitchIntake } from '../src/twitch/intake.ts';
-import { memoryRedemptionStore } from '../src/twitch/redemption-store.ts';
 import { createReward } from '../src/twitch/reward.ts';
 import { RequestQueue } from '../src/queue/request-queue.ts';
 
@@ -41,6 +40,10 @@ const subscriptions: Record<string, unknown>[] = [];
 const unexpected: string[] = [];
 const statuses = new Map<string, string>();
 let loseNextPatch = false;
+let live = true;
+let holdNextStreamQuery = false;
+let releaseStreamQuery: (() => void) | undefined;
+let reconnectSignals = 0;
 const reward = {
   id: 'reward1',
   broadcaster_id: '123',
@@ -100,6 +103,36 @@ const server = createServer((request, response) => {
       };
     } else if (url.pathname === '/mock/users') {
       result = { data: [{ id: '123', login: 'lacari', display_name: 'Lacari' }] };
+    } else if (url.pathname === '/mock/streams') {
+      if (holdNextStreamQuery) {
+        holdNextStreamQuery = false;
+        await new Promise<void>((resolve) => {
+          releaseStreamQuery = resolve;
+        });
+      }
+      result = {
+        data: live
+          ? [
+              {
+                id: 'stream1',
+                user_id: '123',
+                user_login: 'lacari',
+                user_name: 'Lacari',
+                game_id: '1',
+                game_name: 'Test',
+                type: 'live',
+                title: 'Mock',
+                viewer_count: 1,
+                started_at: new Date().toISOString(),
+                language: 'en',
+                thumbnail_url: '',
+                tag_ids: [],
+                tags: [],
+                is_mature: false,
+              },
+            ]
+          : [],
+      };
     } else if (url.pathname === '/mock/channel_points/custom_rewards') {
       if (request.method === 'POST') {
         let raw = '';
@@ -187,7 +220,7 @@ let played: string | undefined;
 const queue = new RequestQueue({
   pipeline: {
     characters: testCharacters,
-    mode: 'demo',
+    mode: 'live',
     async generate() {
       return 'Reply';
     },
@@ -202,7 +235,20 @@ const queue = new RequestQueue({
   stop() {},
   settings: { viewerCooldownMs: 0, globalCooldownMs: 0 },
 });
-const intake = new TwitchIntake(config, queue, twurpleTransport(file), memoryRedemptionStore());
+const fixtureTransport = twurpleTransport(file);
+const intake = new TwitchIntake(
+  config,
+  queue,
+  (config, callbacks) =>
+    fixtureTransport(config, {
+      ...callbacks,
+      reconnecting() {
+        reconnectSignals++;
+        callbacks.reconnecting();
+      },
+    }),
+  memoryRedemptionStore(),
+);
 async function until(predicate: () => boolean, timeout = 5000): Promise<void> {
   const deadline = Date.now() + timeout;
   while (!predicate()) {
@@ -270,14 +316,21 @@ try {
   assert(validationCalls >= 2);
   assert.equal(rewardCreates, 1);
   assert.equal((await loadToken(file)).token.refreshToken, 'dummy-new-refresh');
-  assert.equal(subscriptions.length, 2);
+  assert.equal(subscriptions.length, 4);
   for (const subscription of subscriptions) {
-    assert.deepEqual(subscription.condition, { broadcaster_user_id: '123', reward_id: 'reward1' });
+    assert.deepEqual(subscription.condition, {
+      broadcaster_user_id: '123',
+      ...(String(subscription.type).startsWith('channel.channel_points')
+        ? { reward_id: 'reward1' }
+        : {}),
+    });
     assert.deepEqual(subscription.transport, { method: 'websocket', session_id: 'mock-session-1' });
   }
   assert.deepEqual(subscriptions.map((entry) => entry.type).sort(), [
     'channel.channel_points_custom_reward_redemption.add',
     'channel.channel_points_custom_reward_redemption.update',
+    'stream.offline',
+    'stream.online',
   ]);
   const addType = 'channel.channel_points_custom_reward_redemption.add';
   const updateType = 'channel.channel_points_custom_reward_redemption.update';
@@ -301,9 +354,43 @@ try {
   statuses.set('redemption2', 'CANCELED');
   send('moderation', updateType, redemption('redemption2'));
   await until(() => queue.snapshot().requests[1]?.status === 'skipped');
+  played = undefined;
+  statuses.set('stream-end', 'UNFULFILLED');
+  send('before-stream-end', addType, redemption('stream-end'));
+  await until(() => !!played);
+  live = false;
+  send('stream-offline', 'stream.offline', {});
+  await until(() => intake.snapshot().live === false && statuses.get('stream-end') === 'CANCELED');
+  const beforeOfflineRequest = queue.snapshot().requests.length;
+  statuses.set('offline', 'UNFULFILLED');
+  send('offline-request', addType, redemption('offline'));
+  await until(() => statuses.get('offline') === 'CANCELED');
+  assert.equal(queue.snapshot().requests.length, beforeOfflineRequest);
+  live = true;
+  send('stream-online', 'stream.online', {
+    id: 'stream2',
+    type: 'live',
+    started_at: new Date().toISOString(),
+  });
+  await until(() => intake.snapshot().live === true);
+  // A slow Get Streams reply from a lost socket cannot confirm a new connection.
+  holdNextStreamQuery = true;
   socket!.terminate();
-  await until(() => subscriptions.length === 4 && intake.snapshot().status === 'connected', 10_000);
-  assert.equal(connections, 2);
+  await until(() => subscriptions.length === 8 && !!releaseStreamQuery, 10_000);
+  const releaseStaleQuery = releaseStreamQuery!;
+  holdNextStreamQuery = true;
+  socket!.terminate();
+  await until(() => reconnectSignals === 2);
+  releaseStaleQuery();
+  await until(() => releaseStreamQuery !== releaseStaleQuery, 10_000);
+  assert.equal(intake.snapshot().status, 'reconnecting');
+  assert.equal(intake.snapshot().live, null);
+  releaseStreamQuery!();
+  await until(
+    () => subscriptions.length === 12 && intake.snapshot().status === 'connected',
+    10_000,
+  );
+  assert.equal(connections, 3);
   socket!.send(
     JSON.stringify({
       metadata: {
@@ -317,11 +404,11 @@ try {
   await until(() => intake.snapshot().status === 'error');
   assert.deepEqual(unexpected, []);
   console.log(
-    'Actual Twurple SDK passed against a local mock: reward setup, broadcaster auth/refresh, both redemption subscriptions, completion reconciliation, moderation cancellation, reconnect, and revocation. No Twitch access.',
+    'Actual Twurple SDK passed against a local mock: reward setup, broadcaster auth/refresh, redemption and stream subscriptions, live-only admission, stream-end cancellation, completion reconciliation, moderation cancellation, reconnect, and revocation. No Twitch access.',
   );
 } finally {
   intake.disconnect();
-  queue.stopAndClear();
+  queue.setRepliesEnabled(false);
   if (previousMockPort === undefined) delete process.env.TWURPLE_MOCK_API_PORT;
   else process.env.TWURPLE_MOCK_API_PORT = previousMockPort;
   globalThis.setTimeout = originalSetTimeout;

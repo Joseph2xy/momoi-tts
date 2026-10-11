@@ -1,17 +1,18 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import type { QueueState, RequestEntry } from '../shared/protocol.ts';
 
-import type { QueuePipeline, QueueSettings } from './contracts.ts';
+import type { QueuePipeline, QueueSettings, QueueRecord } from './contracts.ts';
 import type { CharacterProfile } from '../characters/types.ts';
 import { selectCharacter } from '../characters/input.ts';
-import { RequestInputError } from '../shared/errors.ts';
+import { RequestInputError, SpeechFailure, OperationTimeoutError } from '../shared/errors.ts';
 interface QueueDependencies {
   pipeline?: QueuePipeline;
   playerReady(): boolean;
-  play(id: string, audio: Buffer, label: string): void;
+  play(id: string, audio: Buffer): void;
   stop(id: string): void;
   settings?: Partial<QueueSettings>;
   now?: () => number;
+  record?(record: QueueRecord): void;
 }
 interface Job {
   pipeline?: QueuePipeline;
@@ -19,8 +20,7 @@ interface Job {
   entry: RequestEntry;
   character: CharacterProfile;
   controller: AbortController;
-  pausedAt?: number;
-  pausedMs?: number;
+  eventId: string;
 }
 
 // A slot spans generation, speech, and acknowledged browser playback.
@@ -28,7 +28,7 @@ export class RequestQueue {
   #deps: QueueDependencies;
   #now: () => number;
   #settings: QueueSettings;
-  #paused = false;
+  #repliesEnabled = true;
   #active: Job | null = null;
   #waiting: Job[] = [];
   #history: RequestEntry[] = [];
@@ -36,6 +36,10 @@ export class RequestQueue {
   #viewers = new Map<string, number>();
   #lastAccepted = -Infinity;
   #finishedListeners = new Set<(entry: RequestEntry) => void>();
+  #loggingFailed = false;
+  get loggingFailed() {
+    return this.#loggingFailed;
+  }
   constructor(deps: QueueDependencies) {
     this.#deps = deps;
     this.#now = deps.now ?? Date.now;
@@ -58,7 +62,7 @@ export class RequestQueue {
     return {
       characters: this.#deps.pipeline?.characters.map(({ id, name }) => ({ id, name })) ?? [],
       mode: this.#deps.pipeline?.mode ?? 'disabled',
-      paused: this.#paused,
+      repliesEnabled: this.#repliesEnabled,
       activeId: this.#active?.entry.id ?? null,
       waitingIds: this.#waiting.map((job) => job.entry.id),
       requests: this.#history.map((entry) => ({ ...entry })),
@@ -100,6 +104,8 @@ export class RequestQueue {
     this.tick();
     const previous = this.#events.get(eventId);
     if (previous) return previous.id;
+    if (!this.#repliesEnabled)
+      throw new RequestInputError('Replies are off. This request will be refunded.');
     const { character, question: text } = selectCharacter(question, pipeline.characters);
     const name = viewer.trim();
     this.#checkCapacity(name);
@@ -131,44 +137,32 @@ export class RequestQueue {
       character: Object.freeze({ ...character }),
       controller: new AbortController(),
       fixedPipeline,
+      eventId,
     });
     return entry.id;
   }
-  pause(): void {
-    this.#paused = true;
-  }
-  setPlaybackPaused(paused: boolean): void {
-    const job = this.#active;
-    if (!job || !['ready', 'playing', 'blocked'].includes(job.entry.status)) return;
-    if (paused && job.pausedAt === undefined) job.pausedAt = this.#now();
-    else if (!paused && job.pausedAt !== undefined) {
-      job.pausedMs = (job.pausedMs ?? 0) + this.#now() - job.pausedAt;
-      job.pausedAt = undefined;
+  setRepliesEnabled(enabled: boolean): void {
+    this.#repliesEnabled = enabled;
+    if (enabled) this.tick();
+    else {
+      this.clear();
+      this.#cancelActive('skipped', 'Replies turned off.');
     }
-  }
-  resume(): void {
-    this.#paused = false;
-    this.tick();
   }
   skip(): void {
     this.#cancelActive('skipped');
     this.#pump();
   }
   clear(): void {
-    for (const job of this.#waiting) {
-      job.controller.abort();
-      this.#finish(job.entry, 'removed');
-    }
+    const waiting = this.#waiting;
     this.#waiting = [];
-  }
-  stopAndClear(): void {
-    this.#paused = true;
-    this.clear();
-    this.#cancelActive('skipped');
+    for (const job of waiting) {
+      job.controller.abort();
+      this.#finish(job, 'removed');
+    }
   }
   disconnect(): void {
-    this.#paused = true;
-    this.#cancelActive('skipped', 'Player disconnected; queue paused.');
+    this.setRepliesEnabled(false);
   }
   remove(id: unknown): void {
     const index = this.#waiting.findIndex((job) => job.entry.id === id);
@@ -176,7 +170,7 @@ export class RequestQueue {
     const [job] = this.#waiting.splice(index, 1);
     if (job) {
       job.controller.abort();
-      this.#finish(job.entry, 'removed');
+      this.#finish(job, 'removed');
     }
   }
   playbackEvent(id: string, event: 'playing' | 'blocked' | 'ended' | 'failed'): void {
@@ -186,33 +180,34 @@ export class RequestQueue {
     if (event === 'playing') job.entry.status = 'playing';
     else if (event === 'blocked') job.entry.status = 'blocked';
     else {
+      this.#active = null;
       this.#finish(
-        job.entry,
+        job,
         event === 'ended' ? 'completed' : 'failed',
         event === 'failed' ? 'Audio playback failed.' : undefined,
       );
-      this.#active = null;
       this.#pump();
     }
   }
   tick(): void {
     const now = this.#now();
+    const expired: Job[] = [];
     this.#waiting = this.#waiting.filter((job) => {
       if (now - job.entry.createdAt <= this.#settings.waitingExpiryMs) return true;
-      job.controller.abort();
-      this.#finish(job.entry, 'expired');
+      expired.push(job);
       return false;
     });
+    // Release ownership before callbacks, which may cancel other queued requests.
+    for (const job of expired) {
+      job.controller.abort();
+      this.#finish(job, 'expired');
+    }
     for (const [id, event] of this.#events) if (now - event.at > 600_000) this.#events.delete(id);
     while (this.#events.size > 256) this.#events.delete(this.#events.keys().next().value!);
     for (const [viewer, at] of this.#viewers)
       if (now - at >= this.#settings.viewerCooldownMs) this.#viewers.delete(viewer);
     while (this.#viewers.size > 256) this.#viewers.delete(this.#viewers.keys().next().value!);
-    if (
-      this.#active &&
-      this.#active.pausedAt === undefined &&
-      now - (this.#active.entry.startedAt ?? now) - (this.#active.pausedMs ?? 0) > 180_000
-    )
+    if (this.#active && now - (this.#active.entry.startedAt ?? now) > 180_000)
       this.#cancelActive('failed', 'Request timed out.');
     this.#pump();
   }
@@ -229,6 +224,7 @@ export class RequestQueue {
       );
   }
   #enqueue(job: Job): void {
+    this.#record(job, 'accepted');
     this.#waiting.push(job);
     this.#history.push(job.entry);
     while (this.#history.length > 23) {
@@ -245,7 +241,7 @@ export class RequestQueue {
   }
   #pump(): void {
     if (
-      this.#paused ||
+      !this.#repliesEnabled ||
       this.#active ||
       !this.#waiting.length ||
       !this.#deps.playerReady() ||
@@ -281,7 +277,7 @@ export class RequestQueue {
           if (job.controller.signal.aborted) abort();
           timer = setTimeout(() => {
             phase.abort();
-            reject(new Error('Timed out.'));
+            reject(new OperationTimeoutError());
           }, 45_000);
         }),
       ]);
@@ -300,6 +296,7 @@ export class RequestQueue {
       if (typeof dialogue !== 'string' || !dialogue.trim() || Buffer.byteLength(dialogue) > 4000)
         throw new Error('Invalid dialogue.');
       job.entry.dialogue = dialogue;
+      this.#record(job, 'generated');
       job.entry.status = 'synthesizing';
       const audio = await this.#phase(job, (signal) =>
         job.pipeline!.synthesize(dialogue, signal, job.character),
@@ -312,32 +309,56 @@ export class RequestQueue {
         return;
       }
       job.entry.status = 'ready';
-      this.#deps.play(job.entry.id, audio, `${job.entry.characterName} · ${job.entry.viewer}`);
-    } catch {
+      this.#deps.play(job.entry.id, audio);
+    } catch (error) {
       if (!this.#current(job)) return;
       const message =
         job.entry.status === 'generating'
           ? 'Dialogue generation failed.'
           : job.entry.status === 'synthesizing'
-            ? 'Speech generation failed.'
+            ? error instanceof SpeechFailure
+              ? error.publicMessage
+              : error instanceof OperationTimeoutError
+                ? 'Speech generation timed out.'
+                : 'Speech generation failed.'
             : 'Response could not be played.';
-      this.#finish(job.entry, 'failed', message);
       this.#active = null;
+      this.#finish(job, 'failed', message);
       this.#pump();
     }
   }
-  #finish(entry: RequestEntry, status: RequestEntry['status'], error?: string): void {
+  #finish(job: Job, status: RequestEntry['status'], error?: string): void {
+    const entry = job.entry;
     entry.status = status;
     entry.finishedAt = this.#now();
     if (error) entry.error = error;
+    this.#record(job, 'finished');
     for (const listener of this.#finishedListeners) listener({ ...entry });
+  }
+  #record(job: Job, phase: QueueRecord['phase']): void {
+    if (!this.#deps.record) return;
+    try {
+      const pipeline = job.pipeline ?? job.fixedPipeline ?? this.#deps.pipeline;
+      this.#deps.record({
+        phase,
+        recordedAt: this.#now(),
+        eventId: job.eventId,
+        source: job.eventId.startsWith('reward_') ? 'channel-points' : 'local',
+        entry: { ...job.entry },
+        generation: pipeline?.generation,
+        promptHash: createHash('sha256').update(job.character.prompt).digest('hex'),
+      });
+    } catch {
+      // Logging cannot prevent cancellation or points settlement.
+      this.#loggingFailed = true;
+    }
   }
   #cancelActive(status: 'skipped' | 'failed', error?: string): void {
     const job = this.#active;
     if (!job) return;
     this.#active = null;
     job.controller.abort();
-    this.#finish(job.entry, status, error);
+    this.#finish(job, status, error);
     this.#deps.stop(job.entry.id);
   }
 }

@@ -10,16 +10,20 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { randomUUID } from 'node:crypto';
-import { readConfig, configurationProof } from './config.ts';
+import { configurationProof } from './config.ts';
 import { readGenerationConfig } from './generation.ts';
 import { readCharacters } from '../characters/catalog.ts';
+import { readCharacterEdits, validCharacterEdit, type CharacterEdit } from '../characters/edits.ts';
+import type { CharacterEditorState } from '../shared/protocol.ts';
 import { RequestInputError } from '../shared/errors.ts';
 import type { ManagementState, SettingsSection } from '../shared/protocol.ts';
+import { readTwitchConfig } from '../twitch/config.ts';
+import { defaultFishModel, validateFishModel } from '../providers/fish/config.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const files = ['generation.env', 'fish.env'] as const;
 const generationNames = [
-  'TYRONE_TEXT_PROVIDER',
+  'MOMOI_TTS_TEXT_PROVIDER',
   'OPENROUTER_MODEL',
   'OPENROUTER_MAX_TOKENS',
   'OPENROUTER_API_KEY',
@@ -27,30 +31,31 @@ const generationNames = [
 interface AppSettings {
   volume: number;
   setupSeen: boolean;
+  twitchConnected?: boolean;
 }
 
 // Only fixed local paths are accepted. Secrets never enter the public settings contract.
 export class SettingsStore {
   readonly privateRoot: string;
   readonly overrides: NodeJS.ProcessEnv;
-  readonly demo: boolean;
   #values: Record<string, string> = {};
-  #app: AppSettings = { volume: 100, setupSeen: false };
+  #app: AppSettings = { volume: 100, setupSeen: false, twitchConnected: false };
   #readError = false;
   #revision = 0;
   #catalog: URL;
-  constructor(
-    options: { privateRoot?: string; env?: NodeJS.ProcessEnv; demo?: boolean; catalog?: URL } = {},
-  ) {
+  #characterEdits: Record<string, CharacterEdit> = {};
+  constructor(options: { privateRoot?: string; env?: NodeJS.ProcessEnv; catalog?: URL } = {}) {
     this.privateRoot = options.privateRoot ?? resolve(root, '.local');
     this.overrides = { ...(options.env ?? process.env) };
-    this.demo = !!options.demo;
     this.#catalog = options.catalog ?? new URL('../../characters/catalog.json', import.meta.url);
     try {
-      for (const file of files) {
+      for (const file of [...files, 'twitch.env']) {
         const path = resolve(this.privateRoot, file);
         if (existsSync(path)) Object.assign(this.#values, parseEnv(readFileSync(path, 'utf8')));
       }
+      const characterPath = resolve(this.privateRoot, 'characters.json');
+      if (existsSync(characterPath))
+        this.#characterEdits = readCharacterEdits(JSON.parse(readFileSync(characterPath, 'utf8')));
       const path = resolve(this.privateRoot, 'app.json');
       if (existsSync(path)) {
         const app = JSON.parse(readFileSync(path, 'utf8')) as AppSettings;
@@ -58,10 +63,15 @@ export class SettingsStore {
           !Number.isInteger(app.volume) ||
           app.volume < 0 ||
           app.volume > 100 ||
-          typeof app.setupSeen !== 'boolean'
+          typeof app.setupSeen !== 'boolean' ||
+          (app.twitchConnected !== undefined && typeof app.twitchConnected !== 'boolean')
         )
           throw new Error();
-        this.#app = { volume: app.volume, setupSeen: app.setupSeen };
+        this.#app = {
+          volume: app.volume,
+          setupSeen: app.setupSeen,
+          twitchConnected: app.twitchConnected ?? false,
+        };
       }
     } catch {
       this.#readError = true;
@@ -69,12 +79,13 @@ export class SettingsStore {
   }
   env(values = this.#values): NodeJS.ProcessEnv {
     return {
+      FISH_MODEL: defaultFishModel,
       ...values,
       ...this.overrides,
     };
   }
   get port() {
-    const value = Number(this.env().TYRONE_PLAYBACK_PORT ?? 3210);
+    const value = Number(this.env().MOMOI_TTS_PLAYBACK_PORT ?? 3210);
     if (!Number.isInteger(value) || value < 1024 || value > 65535)
       throw new Error('App port must be 1024–65535.');
     return value;
@@ -85,55 +96,130 @@ export class SettingsStore {
   get revision() {
     return this.#revision;
   }
+  twitchConfig() {
+    return readTwitchConfig(this.env());
+  }
+  get twitchConnected() {
+    return this.#app.twitchConnected === true;
+  }
+  rememberTwitch(connected: boolean) {
+    if (this.#readError)
+      throw new RequestInputError('Repair unreadable private settings before connecting Twitch.');
+    const app = { ...this.#app, twitchConnected: connected };
+    this.#write('app.json', JSON.stringify(app, null, 2) + '\n');
+    this.#app = app;
+  }
   queueSettings() {
     const env = this.env();
     const duration = (key: string, fallback: number) => {
       const value = Number(env[key] ?? fallback);
       return Number.isInteger(value) &&
-        value >= (key === 'TYRONE_WAITING_EXPIRY_MS' ? 100 : 0) &&
+        value >= (key === 'MOMOI_TTS_WAITING_EXPIRY_MS' ? 100 : 0) &&
         value <= 3_600_000
         ? value
         : fallback;
     };
     return {
-      viewerCooldownMs: duration('TYRONE_VIEWER_COOLDOWN_MS', 10000),
-      globalCooldownMs: duration('TYRONE_GLOBAL_COOLDOWN_MS', 1000),
-      waitingExpiryMs: duration('TYRONE_WAITING_EXPIRY_MS', 180000),
+      viewerCooldownMs: duration('MOMOI_TTS_VIEWER_COOLDOWN_MS', 10000),
+      globalCooldownMs: duration('MOMOI_TTS_GLOBAL_COOLDOWN_MS', 1000),
+      waitingExpiryMs: duration('MOMOI_TTS_WAITING_EXPIRY_MS', 180000),
     };
   }
   profiles(withVoices = false) {
-    return readCharacters(withVoices ? this.env() : {}, !withVoices, this.#catalog);
+    const base = readCharacters({}, true, this.#catalog);
+    const entries = this.#catalogEntries();
+    const env = this.env();
+    const voiceEnv = { ...env };
+    for (const entry of entries)
+      voiceEnv[entry.voiceIdEnv] = this.#voice(entry.id, entry.voiceIdEnv);
+    const profiles = withVoices ? readCharacters(voiceEnv, false, this.#catalog) : base;
+    return Object.freeze(
+      profiles.map((profile) =>
+        Object.freeze({
+          ...profile,
+          prompt: this.#characterEdits[profile.id]?.prompt ?? profile.prompt,
+        }),
+      ),
+    );
   }
   refreshProfiles() {
     this.profiles();
     this.#revision++;
   }
-  #catalogEntries(): { id: string; voiceIdEnv: string }[] {
-    this.profiles();
+  #catalogEntries(): { id: string; name: string; voiceIdEnv: string }[] {
+    readCharacters({}, true, this.#catalog);
     return JSON.parse(readFileSync(this.#catalog, 'utf8'));
+  }
+  #voice(id: string, envName: string): string {
+    return (
+      this.overrides[envName] ?? this.#characterEdits[id]?.voiceId ?? this.#values[envName] ?? ''
+    );
+  }
+  characterEditor(id: string): CharacterEditorState {
+    const entry = this.#catalogEntries().find((character) => character.id === id);
+    const profile = this.profiles().find((character) => character.id === id);
+    if (!entry || !profile) throw new RequestInputError('Unknown character.');
+    return {
+      id: profile.id,
+      name: profile.name,
+      prompt: profile.prompt,
+      voiceId: this.#voice(id, entry.voiceIdEnv),
+      voiceOverridden: this.overrides[entry.voiceIdEnv] !== undefined,
+    };
+  }
+  saveCharacter(id: string, body: Record<string, unknown>): void {
+    if (this.#readError)
+      throw new RequestInputError('Repair unreadable private settings before saving.');
+    if (!validCharacterEdit(body))
+      throw new RequestInputError(
+        'Enter a nonempty prompt up to 6000 UTF-8 bytes and a valid voice ID or leave the voice blank.',
+      );
+    const current = this.characterEditor(id);
+    const entry = this.#catalogEntries().find((character) => character.id === id)!;
+    if (current.voiceOverridden && body.voiceId !== current.voiceId)
+      throw new RequestInputError(
+        'The launch environment controls this voice. Remove its override before changing it.',
+      );
+    const edits = {
+      ...this.#characterEdits,
+      [id]: {
+        prompt: body.prompt,
+        voiceId: current.voiceOverridden
+          ? (this.#characterEdits[id]?.voiceId ?? this.#values[entry.voiceIdEnv] ?? '')
+          : body.voiceId,
+      },
+    };
+    this.#write('characters.json', JSON.stringify(edits, null, 2) + '\n');
+    this.#characterEdits = edits;
+    this.#revision++;
   }
   snapshot(): ManagementState {
     const env = this.env();
-    const errors: Partial<Record<SettingsSection, string>> = {};
+    const errors: ManagementState['errors'] = {};
     let generationReady = false,
       speechReady = false,
       charactersReady = false;
     try {
-      if (!env.TYRONE_TEXT_PROVIDER) throw new Error('Choose a generation provider.');
       readGenerationConfig(env);
       generationReady = true;
     } catch {
       errors.generation =
-        'Choose a provider and supply its required settings. No connection has been checked.';
+        'Save an OpenRouter API key and exact model ID. No connection has been checked.';
     }
-    speechReady = !!env.FISH_API_KEY && !/\s/u.test(env.FISH_API_KEY);
-    if (!speechReady) errors.speech = 'Configure a valid speech API key.';
+    try {
+      validateFishModel(env.FISH_MODEL);
+      speechReady = !!env.FISH_API_KEY && !/\s/u.test(env.FISH_API_KEY);
+    } catch {
+      speechReady = false;
+    }
+    if (!speechReady)
+      errors.speech = 'Configure your Fish Audio API key and choose a supported speech engine.';
     let characters: ManagementState['characters'] = [];
     try {
-      characters = this.#catalogEntries().map(({ id, voiceIdEnv }) => ({
+      characters = this.#catalogEntries().map(({ id, name, voiceIdEnv }) => ({
         id,
-        name: this.profiles().find((p) => p.id === id)!.name,
-        voiceConfigured: /^[a-f0-9]{32}$/iu.test(env[voiceIdEnv] ?? ''),
+        name,
+        voiceConfigured: /^[a-f0-9]{32}$/iu.test(this.#voice(id, voiceIdEnv)),
       }));
       charactersReady = characters.length > 0 && characters.every((p) => p.voiceConfigured);
       if (!charactersReady)
@@ -148,20 +234,19 @@ export class SettingsStore {
       revision: this.#revision,
       pending: false,
       setupSeen: this.#app.setupSeen,
-      demo: this.demo,
       generation: {
-        provider:
-          env.TYRONE_TEXT_PROVIDER === 'codex'
-            ? 'codex'
-            : env.TYRONE_TEXT_PROVIDER === 'openrouter'
-              ? 'openrouter'
-              : '',
+        provider: env.MOMOI_TTS_TEXT_PROVIDER === 'openrouter' ? 'openrouter' : '',
         model: env.OPENROUTER_MODEL ?? '',
         maxTokens: Number(env.OPENROUTER_MAX_TOKENS ?? 1024),
         keyConfigured: !!env.OPENROUTER_API_KEY,
         ready: generationReady,
       },
-      speech: { provider: 'fish', keyConfigured: !!env.FISH_API_KEY, ready: speechReady },
+      speech: {
+        provider: 'fish',
+        model: env.FISH_MODEL ?? '',
+        keyConfigured: !!env.FISH_API_KEY,
+        ready: speechReady,
+      },
       characters,
       volume: this.#app.volume,
       localReady: generationReady && speechReady && charactersReady && !this.#readError,
@@ -170,50 +255,79 @@ export class SettingsStore {
         (name) =>
           generationNames.includes(name) ||
           name === 'FISH_API_KEY' ||
+          name === 'FISH_MODEL' ||
           /^FISH_[A-Z0-9_]*VOICE_ID$/u.test(name) ||
-          name === 'TYRONE_PLAYBACK_PORT',
+          name === 'MOMOI_TTS_PLAYBACK_PORT',
       ),
     };
   }
   proof(nonce: string): string {
-    // Retain compatibility with existing launcher proofs where configuration is complete.
+    // Only application configuration participates; unrelated inherited values do not affect reuse.
     const env = this.env();
+    const names = Object.keys(env)
+      .filter((name) => /^(?:MOMOI_TTS_|OPENROUTER_|FISH_|TWITCH_)/u.test(name))
+      .sort();
+    let characters: unknown;
     try {
-      return configurationProof(
-        readConfig(
-          { ...env, TWITCH_CLIENT_ID: '', TWITCH_CHANNEL: '' },
-          this.demo ? ['--demo'] : [],
-        ),
-        nonce,
-      );
+      characters = this.profiles();
     } catch {
-      return configurationProof(
-        {
-          demo: this.demo,
-          port: this.port,
-          values: this.#values,
-          overrides: this.overrides,
-          app: this.#app,
-        },
-        nonce,
-      );
+      characters = { invalid: true };
     }
+    return configurationProof(
+      {
+        privateRoot: this.privateRoot,
+        port: this.port,
+        values: Object.fromEntries(names.map((name) => [name, env[name]])),
+        characters,
+        characterEdits: this.#characterEdits,
+        app: this.#app,
+      },
+      nonce,
+    );
   }
   #write(file: string, value: string) {
-    mkdirSync(this.privateRoot, { recursive: true });
     const path = resolve(this.privateRoot, file),
       temp = `${path}.${randomUUID()}.tmp`;
     try {
+      mkdirSync(this.privateRoot, { recursive: true });
       writeFileSync(temp, value, { encoding: 'utf8', mode: 0o600 });
       renameSync(temp, path);
     } catch {
-      if (existsSync(temp)) unlinkSync(temp);
+      try {
+        if (existsSync(temp)) unlinkSync(temp);
+      } catch {
+        // Failed cleanup cannot replace the original redacted persistence error.
+      }
       throw new RequestInputError('Settings could not be stored. Previous settings were kept.');
     }
   }
   save(section: SettingsSection, body: Record<string, unknown>): void {
     if (this.#readError)
       throw new RequestInputError('Repair unreadable private settings before saving.');
+    if (body.removeKey !== undefined) {
+      if (
+        !['generation', 'speech'].includes(section) ||
+        body.removeKey !== true ||
+        Object.keys(body).length !== 1
+      )
+        throw new RequestInputError('Key removal must be a separate action.');
+      const name = section === 'generation' ? 'OPENROUTER_API_KEY' : 'FISH_API_KEY';
+      if (this.overrides[name] !== undefined)
+        throw new RequestInputError(
+          'This key is controlled by the launch environment. Remove its override first.',
+        );
+      const file = section === 'generation' ? 'generation.env' : 'fish.env';
+      const path = resolve(this.privateRoot, file);
+      const original = existsSync(path) ? readFileSync(path, 'utf8') : '';
+      const kept = original.split(/\r?\n/u).filter((line) => {
+        const match = /^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=/u.exec(line);
+        return match?.[1] !== name;
+      });
+      this.#write(file, kept.join('\n').trimEnd() + '\n');
+      delete this.#values[name];
+      this.#revision++;
+      return;
+    }
     const values = { ...this.#values };
     const fail = (message: string): never => {
       throw new RequestInputError(message);
@@ -233,53 +347,37 @@ export class SettingsStore {
     const updates: Record<string, string> = {};
     if (section === 'generation') {
       const provider = text('provider');
-      if (!['openrouter', 'codex'].includes(provider))
-        fail('provider: choose OpenRouter or Codex.');
-      updates.TYRONE_TEXT_PROVIDER = provider;
-      if (provider === 'openrouter') {
-        updates.OPENROUTER_MODEL = text('model');
-        const tokens = body.maxTokens;
-        if (
-          typeof tokens !== 'number' ||
-          !Number.isInteger(tokens) ||
-          tokens < 64 ||
-          tokens > 16384
-        )
-          fail('maxTokens: use an integer from 64 to 16384.');
-        updates.OPENROUTER_MAX_TOKENS = String(tokens);
-        const key = text('key', true);
-        if (key) updates.OPENROUTER_API_KEY = key;
-        const candidate = { ...values, ...updates };
-        try {
-          readGenerationConfig({
-            ...candidate,
-            OPENROUTER_API_KEY: candidate.OPENROUTER_API_KEY || this.overrides.OPENROUTER_API_KEY,
-          });
-        } catch {
-          fail('model/key: supply an exact supported model ID and API key.');
-        }
+      if (provider !== 'openrouter') fail('provider: use OpenRouter.');
+      updates.MOMOI_TTS_TEXT_PROVIDER = provider;
+      updates.OPENROUTER_MODEL = text('model');
+      const tokens = body.maxTokens;
+      if (typeof tokens !== 'number' || !Number.isInteger(tokens) || tokens < 64 || tokens > 16384)
+        fail('maxTokens: use an integer from 64 to 16384.');
+      updates.OPENROUTER_MAX_TOKENS = String(tokens);
+      const key = text('key', true);
+      if (key) updates.OPENROUTER_API_KEY = key;
+      const candidate = { ...values, ...updates };
+      try {
+        readGenerationConfig({
+          ...candidate,
+          OPENROUTER_API_KEY: candidate.OPENROUTER_API_KEY || this.overrides.OPENROUTER_API_KEY,
+        });
+      } catch {
+        fail('model/key: supply an exact supported model ID and API key.');
       }
       file = 'generation.env';
     } else if (section === 'speech') {
+      const model = body.model === undefined ? this.env().FISH_MODEL! : text('model');
+      try {
+        validateFishModel(model);
+      } catch {
+        fail('model: choose a supported Fish Audio model.');
+      }
+      updates.FISH_MODEL = model;
       const key = text('key', true);
       if (key) updates.FISH_API_KEY = key;
       if (!(updates.FISH_API_KEY || values.FISH_API_KEY || this.overrides.FISH_API_KEY))
         fail('key: supply a speech API key.');
-      file = 'fish.env';
-    } else if (section === 'characters') {
-      const voices = body.voices;
-      if (!voices || typeof voices !== 'object' || Array.isArray(voices))
-        fail('voices: supply character voice assignments.');
-      const entries = this.#catalogEntries();
-      for (const [id, voice] of Object.entries(voices as Record<string, unknown>)) {
-        const entry = entries.find((p) => p.id === id);
-        if (!entry || typeof voice !== 'string')
-          fail('voices: unknown character or invalid voice.');
-        if (!voice) continue;
-        if (!/^[a-f0-9]{32}$/iu.test(voice as string))
-          fail('voices: each voice ID must contain 32 hexadecimal characters.');
-        updates[entry!.voiceIdEnv] = voice as string;
-      }
       file = 'fish.env';
     } else if (section === 'playback' || section === 'application') {
       const app = { ...this.#app };

@@ -1,6 +1,22 @@
-CHARACTER APP - WINDOWS SETUP
+MOMOITTS - START HERE
 
-Extract the whole ZIP before running it.
-Follow README.md with your helper for prerequisites, Setup Tyrone.cmd,
-the local demo, accounts, and daily use.
-The package contains no private settings or accounts.
+1. Extract the entire ZIP into a writable folder. Keep all files together.
+2. Double-click Setup MomoiTTS.cmd. Follow prerequisite prompts, reopening the
+   shortcut after Node installation if needed. Initial setup needs internet.
+3. The browser opens management. Save your OpenRouter API key and exact model ID.
+   Save your Fish key and review character instructions
+   and voices. See README.md.
+4. Use Settings to test generation and preview speech independently. Then set up
+   the OBS audio source and use OBS output > Test OBS output to check routing.
+5. Follow README.md for Twitch authorization/reward setup.
+
+For everyday use, Launch MomoiTTS.cmd starts the app in the background.
+Open http://127.0.0.1:3210/ for controls. Replies start off; click Turn replies on.
+
+This is the real app. No demo mode or sample audio is included.
+Saving settings does not call providers; explicit tests and normal replies use
+account allowance and may incur charges for the models you choose.
+Tyrone is one character. Edit character instructions and voices in Characters.
+Speech defaults to S2.1 Pro Free; alternative engines are in the Speech configuration form. Set volume in OBS.
+
+No credentials or accounts are included. Never share your .local folder.

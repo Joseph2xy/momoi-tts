@@ -20,7 +20,8 @@ export interface RedemptionEvent {
   redemptionDate: Date;
 }
 export interface TwitchCallbacks {
-  connected(rewardId: string): void;
+  connected(rewardId: string, live: boolean): void;
+  streamChanged(live: boolean): void;
   reconnecting(): void;
   failed(): void;
   redemption(event: RedemptionEvent): void;
@@ -32,6 +33,7 @@ export interface TwitchTransport {
   status(rewardId: string, id: string): Promise<string>;
   settle(rewardId: string, id: string, target: RedemptionTarget): Promise<string>;
   outstanding(rewardId: string): Promise<{ id: string; rewardId: string }[]>;
+  isLive(): Promise<boolean>;
 }
 export type TwitchTransportFactory = (
   config: TwitchConfig,
@@ -53,31 +55,37 @@ export class TwitchIntake {
     transport: TwitchTransport;
     controller: AbortController;
     since: number;
+    revision: number;
     rewardId?: string;
   } | null = null;
   #work: Promise<void> = Promise.resolve();
   #flushing = false;
   #scheduled = 0;
   #retry?: ReturnType<typeof setInterval>;
+  #liveSince = Infinity;
+  #onRecord: ((event: RedemptionEvent, reason?: string) => void) | undefined;
   constructor(
     config: TwitchConfig | undefined,
     queue: RequestQueue,
     factory: TwitchTransportFactory,
     store: RedemptionStore = fileRedemptionStore(),
+    onRecord?: (event: RedemptionEvent, reason?: string) => void,
   ) {
     this.#config = config;
     this.#queue = queue;
     this.#factory = factory;
     this.#store = store;
+    this.#onRecord = onRecord;
     this.#state = {
       status: config ? 'disconnected' : 'disabled',
       channel: config?.channel ?? null,
-      rewardTitle: config?.rewardTitle ?? 'Ask Tyrone',
+      rewardTitle: config?.rewardTitle ?? 'Ask a character',
       message: config ? 'Ready to connect.' : 'Twitch setup is pending.',
       accepted: 0,
       lastRejection: null,
       pendingUpdates: 0,
       settlementMessage: null,
+      live: null,
     };
     queue.onFinished((entry) => {
       const id = [...this.#requests].find(([, requestId]) => requestId === entry.id)?.[0];
@@ -101,7 +109,7 @@ export class TwitchIntake {
       pendingUpdates: [...this.#pending.keys()].filter((id) => !this.#requests.has(id)).length,
     };
   }
-  #schedule(operation: () => Promise<void>, controller?: AbortController): void {
+  #schedule(operation: () => Promise<void>, controller?: AbortController, revision?: number): void {
     if (this.#scheduled >= 256) {
       this.disconnect();
       this.#state.status = 'error';
@@ -113,6 +121,7 @@ export class TwitchIntake {
       .then(operation)
       .catch(() => {
         if (controller && this.#connection?.controller !== controller) return;
+        if (revision !== undefined && this.#connection?.revision !== revision) return;
         this.#state.settlementMessage =
           'Reward synchronization failed. Check Twitch access and private storage; points may need review in Twitch.';
         this.disconnect();
@@ -139,34 +148,48 @@ export class TwitchIntake {
       this.#state.message = 'Twitch connection failed. Check broadcaster sign-in and reward setup.';
     };
     const transport = this.#factory(this.#config, {
-      connected: (rewardId) => {
+      connected: (rewardId, live) => {
         if (!current()) return;
         const connection = this.#connection!;
+        const revision = connection.revision;
+        const ready = () => current() && connection.revision === revision;
         connection.rewardId = rewardId;
-        this.#schedule(async () => {
-          if (!current()) return;
-          await this.#flush();
-          // Recover old/unseen redemptions on startup and socket reconnect, never replay them.
-          const outstanding = await transport.outstanding(rewardId);
-          if (!current()) return;
-          for (const entry of outstanding) {
-            if (!this.#pending.has(entry.id)) {
-              if (this.#pending.size >= 256) throw new Error('Too many outstanding rewards.');
-              this.#pending.set(entry.id, { ...entry, target: 'CANCELED' });
+        this.#setLive(live);
+        this.#schedule(
+          async () => {
+            if (!ready()) return;
+            await this.#flush();
+            if (!ready()) return;
+            // Recover old/unseen redemptions on startup and socket reconnect, never replay them.
+            const outstanding = await transport.outstanding(rewardId);
+            if (!ready()) return;
+            for (const entry of outstanding) {
+              if (!this.#pending.has(entry.id)) {
+                if (this.#pending.size >= 256) throw new Error('Too many outstanding rewards.');
+                this.#pending.set(entry.id, { ...entry, target: 'CANCELED' });
+              }
             }
-          }
-          await this.#persist();
-          await this.#flush();
-          if (current()) {
-            this.#state.status = 'connected';
-            this.#state.message = 'Listening for channel-point messages.';
-          }
-        }, controller);
+            await this.#persist();
+            await this.#flush();
+            if (ready()) {
+              this.#state.status = 'connected';
+              this.#state.message = 'Listening for channel-point messages.';
+            }
+          },
+          controller,
+          revision,
+        );
+      },
+      streamChanged: (live) => {
+        if (current()) this.#setLive(live);
       },
       reconnecting: () => {
         if (current()) {
+          this.#connection!.revision++;
           // Cancel work during a gap: a missed moderator rejection must never play later.
           this.#state.status = 'reconnecting';
+          this.#state.live = null;
+          this.#liveSince = Infinity;
           this.#state.message = 'Twitch disconnected; reconnecting…';
           for (const requestId of [...this.#requests.values()]) this.#queue.cancel(requestId);
         }
@@ -198,7 +221,7 @@ export class TwitchIntake {
           });
       },
     });
-    this.#connection = { transport, controller, since: Date.now() };
+    this.#connection = { transport, controller, since: Date.now(), revision: 0 };
     this.#state.status = 'connecting';
     this.#state.message = 'Connecting and reconciling rewards…';
     this.#schedule(async () => {
@@ -229,14 +252,25 @@ export class TwitchIntake {
     this.#retry = undefined;
     previous?.controller.abort();
     previous?.transport.stop();
+    this.#state.live = null;
+    this.#liveSince = Infinity;
     for (const requestId of [...this.#requests.values()]) this.#queue.cancel(requestId);
     this.#state.status = this.#config ? 'disconnected' : 'disabled';
     this.#state.message = this.#config
       ? 'Disconnected. Unfinished rewards will be refunded on reconnect.'
       : 'Twitch setup is pending.';
   }
+  #setLive(live: boolean): void {
+    if (live && this.#state.live !== true) this.#liveSince = Date.now();
+    if (!live) {
+      this.#liveSince = Infinity;
+      for (const requestId of [...this.#requests.values()]) this.#queue.cancel(requestId);
+    }
+    this.#state.live = live;
+  }
   async #receive(event: RedemptionEvent): Promise<void> {
     const connection = this.#connection;
+    const revision = connection?.revision;
     if (
       !connection?.rewardId ||
       event.broadcasterName.toLowerCase() !== this.#config!.channel ||
@@ -249,16 +283,27 @@ export class TwitchIntake {
       return;
     if (this.#pending.size >= 256) throw new Error('Reward bookkeeping full.');
     const remoteStatus = await connection.transport.status(event.rewardId, event.id);
-    if (connection !== this.#connection || remoteStatus !== 'UNFULFILLED') return;
+    if (
+      connection !== this.#connection ||
+      connection.revision !== revision ||
+      remoteStatus !== 'UNFULFILLED'
+    )
+      return;
     this.#pending.set(event.id, { id: event.id, rewardId: event.rewardId, target: 'CANCELED' });
     await this.#persist(); // A crash from here refunds the unfinished request on restart.
     this.#seen.add(event.id);
+    this.#onRecord?.(event);
     while (this.#seen.size > 256) this.#seen.delete(this.#seen.values().next().value!);
+    const live = await connection.transport.isLive();
+    const current = connection === this.#connection && connection.revision === revision;
+    if (current) this.#setLive(live);
     if (
-      connection === this.#connection &&
+      current &&
       !this.#resolved.has(event.id) &&
       this.#state.status === 'connected' &&
-      event.redemptionDate.getTime() >= connection.since
+      event.redemptionDate.getTime() >= Math.max(connection.since, this.#liveSince) &&
+      live &&
+      this.#state.live === true
     ) {
       try {
         const requestId = this.#queue.submit(event.userName, event.input, 'reward_' + event.id);
@@ -269,7 +314,17 @@ export class TwitchIntake {
         this.#state.lastRejection =
           error instanceof RequestInputError ? error.message : 'Reward could not be accepted.';
       }
+    } else if (connection === this.#connection) {
+      this.#state.lastRejection = live
+        ? 'Request arrived outside the current live session.'
+        : 'Channel is offline. This request will be refunded.';
     }
+    if (
+      connection === this.#connection &&
+      !this.#requests.has(event.id) &&
+      this.#state.lastRejection
+    )
+      this.#onRecord?.(event, this.#state.lastRejection);
     await this.#flush();
   }
   async #flush(): Promise<void> {

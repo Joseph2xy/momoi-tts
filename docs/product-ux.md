@@ -1,41 +1,35 @@
 # Product and UX brief
 
-## Purpose and use
+MomoiTTS is a mostly unattended local streaming utility. A viewer submits a named character's Channel Points question; the app generates dialogue, plays the assigned voice through OBS with no visible stream content, and records the question/reply privately. Management supplies setup, review and app-specific intervention.
 
-The app is a mostly unattended streaming utility. A viewer addresses a named character; the app generates dialogue and plays it in that character's voice. The streamer opens the control screen briefly to skip a message, check what is waiting, or review recent activity. Continuous attention is not the intended workflow.
+## Interface requirements
 
-The interaction model should resemble a TTS/stream-alert activity feed: predictable controls and compact, readable message entries. StreamElements is a workflow reference, not a feature specification or a layout to reproduce. Its supplied screenshot illustrates the level of simplicity wanted. Donations, subscriptions, advertisements, analytics, and other reference-app features are not authorized additions.
+- Use a modern, simple React interface. Keep each settings topic on its own page and remove implementation details that do not help the user make a decision.
+- Use OpenRouter generation. Enter the API key first, then choose the exact generation model. Saving configuration is explicit; unsupported retained provider selections cannot silently choose API inference.
+- Put Fish Audio API credentials first. Use S2.1 Pro Free by default, with supported engines shown alongside the other configuration fields. Distinguish free developer access from paid API credit and website allowance. Existing explicit engine selections remain intact; inference stays an explicit action.
+- Give Characters its own navigation item, list and detail editor. Each character has a display name, trusted instructions and assigned voice. The owner can author characters privately in management; viewers cannot alter these settings.
+- Recommend OBS for stream-mix volume. Remove the separate playback-volume settings form; retain the existing app volume capability and saved launch default.
+- Put restart and shutdown in the application menu. Keep diagnostic details in a separate dialog.
+- Preserve drafts when navigating between settings topics. Saving credentials or character changes must not contact providers.
+- Centralize tests in Settings. Generation needs a message and an optional character prompt; return text within its dialog. Speech needs only a voice ID and phrase; play the preview in the same browser. Keep character editing free of test controls. Serialize deliberate provider checks/previews and cancel pending previews after successful provider/character saves, including saves from another tab.
+- Keep the existing plain Back button at the top-left inside detail screens, outside the centered content column. Open tests in bounded dialogs with a persistent title/close control and a scrolling body. Closing provider previews cancels them; queued OBS tests retain their identity. Use green success checks, amber warnings and red errors with readable text; keep feedback visible near its action instead of transient-only notifications.
+- Settings and setup open a configuration-aware overview with focused Generation, Speech, OBS output and Twitch destinations. Show saved configuration first; open editing explicitly. Keep manual model-ID selection and current character-management capabilities.
+- Show key status, replacement and confirmed removal without returning saved secrets. Preserve provider/model settings when removing a key. Explain inherited overrides.
+- Keep OBS routing verification on OBS output, using a fixed phrase through the connected audio source. Distinguish saved settings, authenticated credentials, generated output and user-confirmed audibility; explain disabled actions and show safe errors beside the test.
+- Generation and browser speech tests require no OBS, queue or complete character setup. Assigned character voices are optional conveniences alongside direct voice-ID entry. Remember test outcomes for the current visit and invalidate them when configuration changes.
 
-Existing screens, navigation, features, and implementation are revisable. A redesign may change functionality where justified, but consequential changes require discussion. Simplifying what is visible does not automatically justify removing useful behavior.
+## Activity and playback
 
-## Confirmed design constraints
+Keep routine controls brief and predictable. Clearly distinguish active, waiting and completed requests, with history scrolling separately. Keep Skip and Replies on/off easy to reach; batch queue actions and waiting-message removal belong in secondary positions. Replies off cancels current and waiting work; turn-on accepts fresh requests without resuming old speech. Launch and output connection loss leave replies off. Twitch rejects requests while replies are off and cancels unfinished redemptions on stream end for refund, with no policy selectors or private overrides.
 
-- Optimize for brief checks and fast intervention rather than a dashboard, conversation workspace, or large reading stage. Avoid KPIs, decorative panels, repetitive status summaries, and unnecessary navigation.
-- Make active, waiting, and completed work easy to distinguish. Readability and clear hierarchy take priority over visual flourish.
-- Keep routine playback controls accessible. Configuration, testing, diagnostics, restart, and shutdown should not dominate the routine screen.
-- Keep the page stationary and history scrollable; avoid simultaneous page and message-list scrolling.
-- Use the charcoal background, white/gray text, peach accent, and typography feel of [Tania Rascia's website](https://www.taniarascia.com/) as visual inspiration, without copying its page structure.
-- Neither the question nor the character's reply is inherently more important to the user. Their presentation is delegated to design judgment.
-- The user has delegated the prominence of individual waiting-message removal to design judgment informed by comparable alert workflows.
+Show viewer, character, question preview and state. Deliberate read-only inspection exposes the complete question and reply with equal treatment. History has no replay or queue actions. Errors should appear where they affect the user; diagnostic details remain separate.
 
-## Starter design
+Use charcoal surfaces, white/gray text, coral accents and local Outfit typography. Compose shadcn components and Tailwind layouts; shared CSS owns theme tokens and base rules. The responsive sidebar has expanded labels, a centered icon rail and a dismissible mobile drawer. Each screen has one page heading. Settings uses a compact status list and focused topic pages: saved configuration, explicit editing, access checks and independent output tests. Characters is accessed from the sidebar without a duplicate Settings destination and keeps profile cards and a private editor. Activity combines the current conversation, waiting queue and controls, with compact history below. Bound previews; deliberate inspection exposes full text. Narrow screens wrap controls and stack content without horizontal scrolling. Show unsaved drafts in words, including edits on another topic. Empty states and failures give a relevant next action. Preserve cancellation, timeouts, single-player ownership and refund boundaries.
 
-The compact feed is accepted as the starter, with the design principles below. [README](../README.md#characters-and-playback) owns its current interactions. The design remains revisable:
+## Scope and authority
 
-- Use a modest fixed toolbar and a compact message-list layout. Present active and waiting work above scrolling history using a consistent row language and unmistakable state labels, rather than competing large cards.
-- Show viewer, character, a question preview, and relevant state in each entry. Make the complete question and generated reply available through deliberate inspection. The current pass uses a read-only dialog with equal text treatment for question and reply; this keeps long messages from expanding the routine list.
-- Keep Skip and Pause/Resume prominent, and mute easy to reach. Give volume adjustment less space. Preserve the existing meanings of these actions unless a behavior change is discussed.
-- Keep individual waiting-message removal available as a secondary row action. Keep batch clearing and stop-and-clear accessible but less prominent. This preserves useful intervention without turning queue management into the main task.
-- Make ordinary successful actions evident through the list changing. Surface errors where they affect work, with diagnostic detail available separately.
-- Put configuration and optional testing behind a small management entrypoint. Avoid imposing a preparation or Soundcheck workflow. Browser personality editing needs a separate product justification.
-- Remove empty navigation destinations, duplicate entrypoints, character-loaded decoration, and repetitive readiness/explanatory surfaces from the routine screen.
+Cooldowns, queue bounds, expiry and technical timeouts remain internal safeguards, without new operational settings. The global cooldown remains a burst-admission protection separate from sequential provider processing.
 
-The [StreamElements Activity Feed documentation](https://support.streamelements.com/hc/en-us/articles/10474542090770-Activity-Feed-Overview) documents mute and skip controls as live alert-management actions. The compact presentation and secondary waiting-message removal are design choices for this app, not claims about StreamElements' exact queue behavior.
+Per-reply approval and additional filtering remain deferred. Browser-driven Twitch authorization/reward creation is outside the current interface change; assisted terminal setup remains acceptable.
 
-## Review boundary
-
-The operating model above governs further refinement. Discuss consequential feature or behavior changes before implementing them; routine design choices can use the delegated judgment recorded above. Evaluate revisions by whether the streamer can quickly identify current work, find what is next, intervene, and leave the screen. Consult official documentation for the libraries used during implementation.
-
-Queue bounds, sequential playback, cancellation, timeouts, and protection against late skipped results remain required. History remains read-only. Intake during pause and work remaining at stream end are unresolved product policies; the visual brief does not settle them.
-
-[Current scope and authorization](../PROJECT_HANDOFF.md) · [Implemented behavior and commands](../README.md) · [Architecture](architecture.md) · [Verification](verification.md)
+[README](../README.md) owns implemented interactions and setup. [Architecture](architecture.md) owns technical boundaries, [verification](verification.md) owns evidence, and [handoff](../PROJECT_HANDOFF.md) owns current status and unresolved choices.

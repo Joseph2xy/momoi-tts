@@ -1,56 +1,33 @@
 import assert from 'node:assert/strict';
-import { readConfig } from '../src/app/config.ts';
+import { SettingsStore } from '../src/app/settings.ts';
+import { launchMode } from '../src/app/launch-mode.ts';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { readGenerationConfig } from '../src/app/generation.ts';
 
 const dummyKey = 'private-dummy-key';
-const voiceId = '0123456789abcdef0123456789abcdef';
-assert.equal(readConfig({}, []).fish, undefined);
-assert.deepEqual(readConfig({ FISH_API_KEY: dummyKey, FISH_VOICE_ID: voiceId }, []).fish, {
-  apiKey: dummyKey,
-});
-for (const env of [
-  { FISH_API_KEY: dummyKey },
-  { FISH_VOICE_ID: voiceId },
-  { FISH_API_KEY: dummyKey, FISH_VOICE_ID: 'invalid' },
-]) {
-  assert.throws(
-    () => readConfig(env, []),
-    (error) =>
-      error instanceof Error &&
-      error.message.includes('FISH_API_KEY') &&
-      !error.message.includes(dummyKey),
-  );
-  assert.equal(readConfig(env, ['--demo']).fish, undefined);
-}
-assert.throws(() => readConfig({}, ['--unknown']), /Unknown app option/u);
-assert.throws(() => readConfig({ TYRONE_PLAYBACK_PORT: '999999' }, []), /App port/u);
-assert.throws(() => readConfig({ TYRONE_WAITING_EXPIRY_MS: '0' }, []), /duration/u);
-assert.deepEqual(readGenerationConfig({}), { provider: 'codex' });
-assert.deepEqual(
-  readGenerationConfig({
-    TYRONE_TEXT_PROVIDER: 'codex',
-    TYRONE_CODEX_BIN: 'private-cli-path',
-    TYRONE_CODEX_LAUNCHER: 'private-launcher-path',
-  }),
-  { provider: 'codex', codexBin: 'private-cli-path', codexLauncher: 'private-launcher-path' },
-);
-assert.deepEqual(
-  readGenerationConfig({ TYRONE_TEXT_PROVIDER: 'codex', OPENROUTER_API_KEY: dummyKey }),
-  { provider: 'codex' },
-);
+const store = (env: NodeJS.ProcessEnv = {}) =>
+  new SettingsStore({ privateRoot: join(tmpdir(), 'momoitts-nonexistent-config'), env });
+assert.equal(store().snapshot().localReady, false);
+assert.throws(() => launchMode(['--unknown']), /Unknown app option/u);
+assert.throws(() => store({ MOMOI_TTS_PLAYBACK_PORT: '999999' }).port, /App port/u);
+assert.equal(store({ MOMOI_TTS_WAITING_EXPIRY_MS: '0' }).queueSettings().waitingExpiryMs, 180000);
+assert.throws(() => readGenerationConfig({}), /PROVIDER/u);
 const openRouter = {
-  TYRONE_TEXT_PROVIDER: 'openrouter',
+  MOMOI_TTS_TEXT_PROVIDER: 'openrouter',
   OPENROUTER_API_KEY: dummyKey,
   OPENROUTER_MODEL: 'test/model:free',
 };
-assert.deepEqual(readConfig(openRouter, []).generation, {
+assert.deepEqual(readGenerationConfig(openRouter), {
   provider: 'openrouter',
   apiKey: dummyKey,
   model: 'test/model:free',
   maxTokens: 1024,
 });
 for (const env of [
-  { TYRONE_TEXT_PROVIDER: 'unknown' },
+  // Existing unsupported selections never silently adopt an API billing route.
+  { ...openRouter, MOMOI_TTS_TEXT_PROVIDER: 'codex' },
+  { MOMOI_TTS_TEXT_PROVIDER: 'unknown' },
   { OPENROUTER_API_KEY: dummyKey },
   { ...openRouter, OPENROUTER_API_KEY: '' },
   { ...openRouter, OPENROUTER_MODEL: '' },
@@ -65,11 +42,10 @@ for (const env of [
   { ...openRouter, OPENROUTER_MAX_TOKENS: '999999' },
 ]) {
   assert.throws(
-    () => readConfig(env, []),
+    () => readGenerationConfig(env),
     (error) => error instanceof Error && !error.message.includes(dummyKey),
   );
-  assert.equal(readConfig(env, ['--demo']).generation, undefined);
 }
 console.log(
-  'Offline app configuration checks passed: partial credentials, redacted errors, mode isolation, port and duration bounds.',
+  'Offline app configuration checks passed: partial credentials, redacted errors, port and duration bounds.',
 );

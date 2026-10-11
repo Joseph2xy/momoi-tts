@@ -16,8 +16,7 @@ if (!closed) process.exit(1);
 const child = spawn(
   process.execPath,
   [
-    'scripts/launch/launch.ts',
-    ...(process.argv.includes('--demo') ? ['--demo'] : []),
+    `scripts/launch/launch.${import.meta.url.endsWith('.js') ? 'js' : 'ts'}`,
     ...(process.argv.includes('--no-open') ? ['--no-open'] : []),
   ],
   { cwd: process.cwd(), env: process.env, detached: true, windowsHide: true, stdio: 'ignore' },

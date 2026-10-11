@@ -4,16 +4,16 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomBytes } from 'node:crypto';
-import { ensureBrowserBuild } from '../build/browser.ts';
+import { ensureFrontend } from './frontend.ts';
 import { SettingsStore } from '../../src/app/settings.ts';
+import { launchMode } from '../../src/app/launch-mode.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const args = process.argv.slice(2);
 async function launch() {
-  if (args.some((arg) => !['--demo', '--no-open'].includes(arg)))
-    throw new Error('Unknown launcher option.');
-  const store = new SettingsStore({ demo: args.includes('--demo') });
-  const config = { port: store.port, demo: store.demo };
+  launchMode(args);
+  const store = new SettingsStore();
+  const config = { port: store.port };
   const base = `http://127.0.0.1:${config.port}`;
   const expectedMode = configuredPipeline(store)?.mode ?? 'disabled';
   const nonce = randomBytes(32).toString('hex');
@@ -23,7 +23,7 @@ async function launch() {
       response = await fetch(`${base}/api/health`, {
         signal: AbortSignal.timeout(1000),
         redirect: 'error',
-        headers: { 'X-Tyrone-Launch-Nonce': nonce },
+        headers: { 'X-MomoiTTS-Launch-Nonce': nonce },
       });
     } catch (error) {
       if (
@@ -41,21 +41,22 @@ async function launch() {
     } catch {
       throw new Error('Another application is using the app port.');
     }
-    if (!response.ok || health.app !== 'tyrone')
+    if (!response.ok || health.app !== 'momoitts')
       throw new Error('Another application is using the app port.');
     if (health.mode !== expectedMode)
       throw new Error(
-        'Tyrone is already running in a different mode. Quit it before switching modes.',
+        'MomoiTTS is already running with a different setup. Quit it before changing settings.',
       );
     if (health.configurationProof !== store.proof(nonce))
       throw new Error(
-        'Tyrone is already running with different settings. Quit it before changing provider, model, or private configuration.',
+        'MomoiTTS is already running with different settings. Quit it before changing provider, model, or private configuration.',
       );
     return true;
   }
   if (!(await running())) {
-    await ensureBrowserBuild();
-    const child = spawn(process.execPath, ['src/app/main.ts', ...args], {
+    await ensureFrontend();
+    const extension = import.meta.url.endsWith('.js') ? 'js' : 'ts';
+    const child = spawn(process.execPath, [`src/app/main.${extension}`, ...args], {
       cwd: root,
       windowsHide: true,
       detached: true,
@@ -73,14 +74,14 @@ async function launch() {
     try {
       for (let attempt = 0; attempt < 40; attempt++) {
         if (exited)
-          throw new Error('Tyrone could not start. Run npm start to see the startup message.');
+          throw new Error('MomoiTTS could not start. Run npm start to see the startup message.');
         if (await running()) {
           ready = true;
           break;
         }
         await delay(250);
       }
-      if (!ready) throw new Error('Tyrone did not become ready. Run npm start to check startup.');
+      if (!ready) throw new Error('MomoiTTS did not become ready. Run npm start to check startup.');
     } catch (error) {
       if (!exited) child.kill();
       throw error;
@@ -89,19 +90,19 @@ async function launch() {
   if (!args.includes('--no-open')) {
     await promisify(execFile)(
       'powershell.exe',
-      ['-NoProfile', '-Command', 'Start-Process -FilePath $env:TYRONE_LAUNCH_URL'],
+      ['-NoProfile', '-Command', 'Start-Process -FilePath $env:MOMOI_TTS_LAUNCH_URL'],
       {
         windowsHide: true,
-        env: { ...process.env, TYRONE_LAUNCH_URL: base },
+        env: { ...process.env, MOMOI_TTS_LAUNCH_URL: base },
         timeout: 10_000,
       },
     );
   }
-  console.log(`Tyrone ready at ${base}`);
+  console.log(`MomoiTTS ready at ${base}`);
 }
 try {
   await launch();
 } catch (error) {
-  console.error(error instanceof Error ? error.message : 'Tyrone could not start.');
+  console.error(error instanceof Error ? error.message : 'MomoiTTS could not start.');
   process.exitCode = 1;
 }

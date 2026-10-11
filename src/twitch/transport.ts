@@ -28,6 +28,9 @@ export function twurpleTransport(file = tokenFile): TwitchTransportFactory {
     let api: ApiClient | null = null;
     let broadcasterId = '';
     let rewardId = '';
+    let live = false;
+    let streamRevision = 0;
+    let socketRevision = 0;
     const stop = () => {
       stopped = true;
       if (validationTimer) clearInterval(validationTimer);
@@ -43,6 +46,16 @@ export function twurpleTransport(file = tokenFile): TwitchTransportFactory {
     };
     return {
       stop,
+      async isLive() {
+        if (stopped || !api) throw new Error('Twitch disconnected.');
+        const revision = streamRevision;
+        const stream = await api.asUser(broadcasterId, (client) =>
+          client.streams.getStreamByUserId(broadcasterId),
+        );
+        if (stopped) throw new Error('Twitch disconnected.');
+        if (revision === streamRevision) live = !!stream;
+        return live;
+      },
       async status(reward, id) {
         if (stopped || !api) throw new Error('Twitch disconnected.');
         const result = await api.asUser(broadcasterId, (client) =>
@@ -163,13 +176,14 @@ export function twurpleTransport(file = tokenFile): TwitchTransportFactory {
         broadcasterId = channel.id;
         const reward = await findReward(api, userId, config);
         check();
-        if (!reward) throw new Error('Create the Tyrone reward first.');
+        if (!reward) throw new Error('Create the configured character reward first.');
         rewardId = reward.id;
         listener = new EventSubWsListener({ apiClient: api, logger });
         const subscriptions = new Set<string>();
         listener.onUserSocketDisconnect(() => {
           if (stopped) return;
           subscriptions.clear();
+          socketRevision++;
           callbacks.reconnecting();
           if (connectingTimer) clearTimeout(connectingTimer);
           connectingTimer = setTimeout(failed, 20_000);
@@ -177,13 +191,36 @@ export function twurpleTransport(file = tokenFile): TwitchTransportFactory {
         listener.onSubscriptionCreateSuccess((subscription) => {
           if (stopped) return;
           subscriptions.add(subscription.id);
-          if (subscriptions.size === 2) {
+          if (subscriptions.size === 4) {
             if (connectingTimer) clearTimeout(connectingTimer);
-            callbacks.connected(rewardId);
+            const revision = streamRevision;
+            const connectedSocket = socketRevision;
+            void api!
+              .asUser(broadcasterId, (client) => client.streams.getStreamByUserId(broadcasterId))
+              .then((stream) => {
+                if (stopped || socketRevision !== connectedSocket) return;
+                if (revision === streamRevision) live = !!stream;
+                callbacks.connected(rewardId, live);
+              })
+              .catch(() => {
+                if (socketRevision === connectedSocket) failed();
+              });
           }
         });
         listener.onSubscriptionCreateFailure(failed);
         listener.onRevoke(failed);
+        listener.onStreamOnline(channel.id, () => {
+          if (stopped) return;
+          streamRevision++;
+          live = true;
+          callbacks.streamChanged(true);
+        });
+        listener.onStreamOffline(channel.id, () => {
+          if (stopped) return;
+          streamRevision++;
+          live = false;
+          callbacks.streamChanged(false);
+        });
         listener.onChannelRedemptionAddForReward(channel.id, rewardId, (event) => {
           if (!stopped) callbacks.redemption(event);
         });

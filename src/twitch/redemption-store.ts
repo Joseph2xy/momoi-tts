@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
 export type RedemptionTarget = 'FULFILLED' | 'CANCELED';
@@ -10,19 +10,6 @@ export interface PendingRedemption {
 export interface RedemptionStore {
   load(owner: string): Promise<PendingRedemption[]>;
   save(owner: string, entries: PendingRedemption[]): Promise<void>;
-}
-export function memoryRedemptionStore(): RedemptionStore {
-  let saved: PendingRedemption[] = [];
-  let savedOwner = '';
-  return {
-    async load(owner) {
-      return owner === savedOwner ? structuredClone(saved) : [];
-    },
-    async save(owner, entries) {
-      savedOwner = owner;
-      saved = structuredClone(entries);
-    },
-  };
 }
 // Only identifiers and intended outcomes are persisted, never viewer input or credentials.
 export function fileRedemptionStore(
@@ -65,8 +52,12 @@ export function fileRedemptionStore(
       if (entries.length > 256) throw new Error('Reward bookkeeping full.');
       await mkdir(new URL('./', file), { recursive: true });
       const temporary = new URL(`${file.href}.${randomUUID()}.tmp`);
-      await writeFile(temporary, JSON.stringify({ owner, entries }), { mode: 0o600 });
-      await rename(temporary, file);
+      try {
+        await writeFile(temporary, JSON.stringify({ owner, entries }), { mode: 0o600 });
+        await rename(temporary, file);
+      } finally {
+        await rm(temporary, { force: true });
+      }
     },
   };
 }

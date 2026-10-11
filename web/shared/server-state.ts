@@ -18,6 +18,7 @@ export function createServerState(
   const key = ['app-state'] as const;
   const view: ServerView = { state: null, connected: false, pending: false, message: '' };
   let running = false;
+  let lastView: ServerView | null = null;
   let activeCommand: AbortController | null = null;
   const options = (enabled: boolean) => ({
     queryKey: key,
@@ -37,7 +38,17 @@ export function createServerState(
   });
   const observer = new QueryObserver(client, options(false));
   const notify = () => {
-    if (running) onChange({ ...view });
+    if (
+      !running ||
+      (lastView &&
+        lastView.state === view.state &&
+        lastView.connected === view.connected &&
+        lastView.pending === view.pending &&
+        lastView.message === view.message)
+    )
+      return;
+    lastView = { ...view };
+    onChange(lastView);
   };
   observer.subscribe((result) => {
     if (result.data) view.state = result.data;
@@ -47,6 +58,7 @@ export function createServerState(
   });
   return {
     start() {
+      lastView = null;
       running = true;
       observer.setOptions(options(!view.pending));
       notify();
@@ -55,6 +67,9 @@ export function createServerState(
       running = false;
       observer.setOptions(options(false));
       void client.cancelQueries({ queryKey: key });
+      activeCommand?.abort();
+    },
+    cancelCommand() {
       activeCommand?.abort();
     },
     async command<T = PlaybackState>(route: string, body: unknown, timeout = 5000): Promise<T> {
@@ -67,6 +82,7 @@ export function createServerState(
       activeCommand = controller;
       try {
         await client.cancelQueries({ queryKey: key });
+        controller.signal.throwIfAborted();
         const response = await fetcher(route, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -74,6 +90,7 @@ export function createServerState(
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(timeout)]),
         });
         const result = await response.json();
+        controller.signal.throwIfAborted();
         if (!response.ok) throw new Error(result.error || 'The action could not be completed.');
         view.message = '';
         if (result.queue) client.setQueryData(key, result as PlaybackState);

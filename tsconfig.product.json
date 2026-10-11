@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "noEmitOnError": true,
+    "rewriteRelativeImportExtensions": true,
+    "rootDir": ".",
+    "outDir": ".generated/product-build"
+  },
+  "include": ["src/**/*.ts", "scripts/launch/**/*.ts", "scripts/twitch/**/*.ts"]
+}

@@ -1,12 +1,13 @@
 param(
     [ValidateSet('Bootstrap', 'Check', 'Install')]
     [string]$Action = 'Bootstrap',
-    [switch]$Demo,
     [switch]$NoOpen
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location -LiteralPath $projectRoot
+$prebuilt = Test-Path -LiteralPath (Join-Path $projectRoot 'src/app/main.js')
+$dependencyFile = if ($prebuilt) { 'node_modules/@twurple/eventsub-ws/package.json' } else { 'node_modules/vite/package.json' }
 function Ask([string]$Text) {
     Add-Type -AssemblyName PresentationFramework
     return [System.Windows.MessageBox]::Show($Text, 'Prepare this PC', 'YesNo', 'Question') -eq 'Yes'
@@ -24,6 +25,10 @@ function Run-Npm([string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) { throw 'The setup action failed. Check internet access and supported software, then retry.' }
 }
 function Install-App {
+    if ($prebuilt) {
+        Run-Npm @('ci', '--omit=dev', '--ignore-scripts')
+        return
+    }
     Run-Npm @('ci')
     Run-Npm @('run', 'build')
 }
@@ -41,8 +46,9 @@ function Prepare-PC {
         [System.Windows.MessageBox]::Show('After installing Node.js, reopen this shortcut to finish preparing the app.', 'Prepare this PC', 'OK', 'Information') | Out-Null
         return $false
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'node_modules/vite/package.json'))) {
-        if (-not (Ask 'App dependencies are missing. Download the pinned dependencies and build the browser interface? This requires internet; it does not contact generation, speech, or Twitch services.')) { return $false }
+    if (-not (Test-Path -LiteralPath (Join-Path $projectRoot $dependencyFile))) {
+        $description = if ($prebuilt) { 'App dependencies are missing. Download the pinned runtime dependencies? This requires internet; it does not contact generation, speech, or Twitch services.' } else { 'Development dependencies are missing. Download the pinned dependencies and build the browser interface? This requires internet; it does not contact generation, speech, or Twitch services.' }
+        if (-not (Ask $description)) { return $false }
         Install-App | Out-Null
     }
     return $true
@@ -52,11 +58,10 @@ try {
         'Bootstrap' {
             if (-not (Prepare-PC)) { exit 1 }
             $launchArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + (Join-Path $PSScriptRoot 'launch.ps1') + '"'))
-            if ($Demo) { $launchArguments += '-Demo' }
             if ($NoOpen) { $launchArguments += '-NoOpen' }
             Start-Process -FilePath 'powershell.exe' -ArgumentList $launchArguments -WorkingDirectory $projectRoot -WindowStyle Hidden
         }
-        'Check' { Require-Node; if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'node_modules/vite/package.json'))) { throw 'App dependencies are missing.' } }
+        'Check' { Require-Node; if (-not (Test-Path -LiteralPath (Join-Path $projectRoot $dependencyFile))) { throw 'App dependencies are missing.' } }
         'Install' { Install-App }
     }
 } catch {

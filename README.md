@@ -1,98 +1,124 @@
-# Stream characters
+# MomoiTTS
 
-A local Windows companion that turns a named character's question into dialogue and assigned-voice playback. Browser management is integrated; Twitch connection and OBS setup are deferred. Tyrone is the first file-based character. App naming and final model/voice refinement remain deferred.
+MomoiTTS is a local Windows app that turns a viewer's named-character Channel Points question into a generated spoken reply. OBS receives audio through a transparent Browser source. Characters have independent prompts and assigned voices; Tyrone is the first character, not the app's name.
 
-The [product and UX brief](docs/product-ux.md) defines the occasional-use control screen and accepted starter design. The behavior described below is the current implementation.
+## First-time setup
 
-## Run locally
+1. Extract the entire product ZIP into a writable folder. Keep its files together, then double-click **Setup MomoiTTS.cmd**.
+2. If Node.js is missing or too old, setup offers installation. Reopen the shortcut afterward. Allow installation of the app's pinned runtime dependencies when prompted. Initial preparation needs internet; the browser interface is already built.
+3. The local management page opens at `http://127.0.0.1:3210/`. The setup overview shows configured topics and their next useful actions. Replies start off.
+4. Open **Generation**, enter your OpenRouter API key, then enter an exact model ID and save.
+5. Open **Speech**, enter your Fish Audio API key and save. S2.1 Pro Free is the default; the speech engine selector appears alongside the API key. Open **Characters**, select a character, review its instructions and assign its Fish voice ID. Save.
+6. In **Settings → Generation**, use **Check connection**, then **Test generation** to get a text response. In **Settings → Speech**, use **Check connection**, then **Test speech** with a voice ID and phrase to hear a preview in your browser. These are independent checks; saving never calls a provider.
+7. Configure [OBS audio](#obs-audio-source). Keep the source active, click **Turn replies on**, then use **Settings → OBS output → Test OBS output** with a voice ID. This sends a short spoken phrase through the audio source without generating a reply. Confirm monitoring and recording in OBS.
+8. For viewer intake, finish [Twitch setup](#channel-points). Account authorization and reward creation are deliberate setup actions.
 
-Use Node.js 24.12 or newer.
+Reopen setup using **App options → Setup guide**. Settings opens an overview with separate Generation, Speech, OBS output and Twitch topics; Characters is a main navigation item. Activity can be opened while setup is incomplete, but requests requiring missing configuration are blocked. Configured status describes saved settings; it does not prove current model access, account allowance or successful speech.
 
-```powershell
-npm ci
-npm run demo
-```
+## Everyday use
 
-Demo uses synthetic dialogue and a two-second tone, with no provider or Twitch calls. Open [controls](http://127.0.0.1:3210/), enable audio if prompted, and click **Resume**. Open [testing](http://127.0.0.1:3210/testing) separately and submit `Tyrone: How do I improve at ranked?`. The testing page owns no audio. One main tab owns playback; closing/refreshing it cancels active work and pauses. Reopen and Resume. Shutdown is in **Settings → Application**, or Ctrl+C for foreground use.
+Double-click **Launch MomoiTTS.cmd**. It starts the app in the background without opening a browser. Keep the OBS source active, open management when needed, and click **Turn replies on**. Launch and restart always return with replies off. Repeated launches reuse the matching service; changed settings require explicit shutdown/relaunch when reuse is refused.
 
-On Windows, **Try Tyrone Demo.cmd** starts/reuses demo; **Launch Tyrone.cmd** starts/reuses normal mode. **Setup Tyrone.cmd** runs prerequisite bootstrap and opens normal mode. Missing Node/dependencies produce explicit assisted-install prompts. Repeated launches reuse matching servers; a mismatch requires explicit shutdown/relaunch. Switch modes only after shutdown. Private launcher logs remain in `.local/launcher*.log`.
-
-For transfer, `npm run package` writes a public-source ZIP under `.generated/releases/`, excluding private state, dependencies and generated output. Extract the entire ZIP into a writable folder and keep its files together before running a shortcut. The package contains no private settings or accounts. Node installation may need administrator approval; reopen the shortcut afterward. Dependency setup downloads pinned packages and builds the interface.
-
-## Browser management and private configuration
-
-First opening shows a reopenable setup checklist. Activity remains accessible with incomplete setup; normal full requests require generation, speech and voices. No provider is silently chosen for new management installations. Open Settings using the gear beside Activity; use Back to Activity to return. Settings has Generation, Speech, Character voices, Playback and Application sections. Application explains the deferred Twitch integration and links to the checklist and optional local testing.
-
-Generation, Speech, Character voices, and Playback have Save/Discard; Application contains actions and diagnostics. Drafts survive navigation within the tab and remain in page memory. Save validates and writes local files without contacting providers. Blank secret replacements retain existing values; saved keys/voice IDs are never returned to the page. Active requests finish on their original settings; waiting requests use changes before starting, retaining character selection. Default volume applies on the next launch. Restart warns before clearing queued work and returns paused.
-
-| File | Purpose |
-| --- | --- |
-| `.local/generation.env` | Generation provider/model/key and optional CLI paths |
-| `.local/fish.env` | Speech key and per-character voice IDs |
-| `.local/app.json` | Setup progress and launch-volume default |
-| `.local/twitch.env` | Reserved private settings for separately agreed Twitch setup |
-
-Public templates live in `config/examples/`. Actual inherited environment variables override file values; management displays relevant override names. The server port defaults to 3210. Developers can set `TYRONE_PLAYBACK_PORT` in the launch environment or private generation env file before launch; it is outside browser Settings. Legacy `app.json` port entries are ignored. Never commit/share private files. Essential startup failures remain separate from missing provider settings; missing settings no longer block opening management. Startup does not connect Twitch or request generation/TTS.
-
-Connection checks and response/voice tests are explicit separate actions. API-key checks authenticate against read-only account endpoints without inference. Codex has one Check prerequisites action, verifying local executable/version only. The single Testing page offers response-only, fixed-phrase voice-only and full question-to-playback tests. Normal-mode tests use configured allowance and require separately agreed connected trials.
-
-OpenRouter requires `TYRONE_TEXT_PROVIDER=openrouter`, `OPENROUTER_API_KEY` and an exact `OPENROUTER_MODEL`. No final model is selected. `OPENROUTER_MAX_TOKENS` defaults to 1024, range 64–16384, and includes reasoning for many models; the separate spoken limit is 60 words. Incomplete/overlength replies are rejected without retry/truncation. Temporary zero-price caps, one exact model, no tools/plugins and no fallback prevent paid routing. Verify current free access, allowance and terms before connected use. Presets, automatic routers and search-enabled variants remain unsupported.
-
-Codex requires explicit `TYRONE_TEXT_PROVIDER=codex`, ChatGPT sign-in and guarded CLI **0.162.0**. Prepare that version externally with your helper and use `codex login` with the streamer's ChatGPT account before selecting Codex in Settings. The app checks executable/version only, not sign-in or allowance. Other versions remain rejected until checked. Optional private `TYRONE_CODEX_BIN`/`TYRONE_CODEX_LAUNCHER` paths are supported. Audition configuration defaults to Codex; browser management requires explicit selection. Subscription access does not imply unlimited or API-billed use.
-
-Speech currently uses Fish `s2.1-pro-free`. Verify access, allowance and commercial terms before live speech. Final provider/persona/voice evaluation remains separate.
-
-## Characters and playback
-
-`characters/catalog.json` contains trusted profiles and `characters/prompts/` their instructions. Each entry has a unique `id`, display `name` (up to 40 characters, no colon), relative `promptFile`, and `voiceIdEnv` naming a private 32-character Fish voice setting. Add profiles/prompts in files, click **Refresh file-based profiles** in Application, then assign their voices. No browser character Add/Edit interface is required initially. Demo ignores voice credentials.
-
-Input is `Name: question`; names are case-insensitive, with no default character. Questions after the first colon may contain colons and are bounded to 1,000 characters. Browser state exposes IDs/names, never prompts or voice IDs. Activity uses compact rows showing viewer, character, question preview and state. Current and Up next stay stationary; only History scrolls, with the latest outcomes first. Select a row to inspect the complete question and reply in a read-only dialog; Escape or Close returns to the list. History has no replay or queue actions.
-
-Skip and Pause/Resume sit in the toolbar with mute and a small volume control. **More playback controls** contains Clear waiting and Stop and clear. Waiting rows have a secondary Remove action. Settings navigation retains audio ownership and unsaved drafts.
+Management can close while OBS continues queued playback. Speech previews play only in the Settings browser and stop when their test closes or you leave the page. **App options** supplies restart, shutdown and a separate Diagnostics dialog. Shutting down stops the local website; a saved bookmark does not start the service.
 
 | Control | Behavior |
 | --- | --- |
-| Pause / Resume | Hold speech and the next request; generation can prepare a held clip |
-| Skip current | Cancel current work and preserve pause |
-| Stop and clear | Cancel everything and remain paused |
-| Clear waiting / Remove | Discard waiting work |
-| Mute / Volume | Adjust audibility independently of queue progression |
+| Replies on / off | On accepts fresh requests. Off stops current speech, cancels waiting work and rejects new requests. Unfinished Channel Points requests are canceled for refund. |
+| Skip reply | Cancel only current work and continue with the next request. |
+| Clear waiting / Remove | Discard waiting work. |
+| Mute / Volume | Change app audibility independently of queue progression; use OBS for the stream mix. |
 
-Capacity is one active and two waiting, with one submitted request per viewer. Deduplication, cooldowns, expiry and deadlines remain bounded. `TYRONE_VIEWER_COOLDOWN_MS`, `TYRONE_GLOBAL_COOLDOWN_MS`, and `TYRONE_WAITING_EXPIRY_MS` configure queue durations; invalid duration values use bounded defaults. Queue/history reset on restart.
+Capacity is one active and two waiting requests, with per-viewer bounds, cooldowns, deduplication, expiry and timeouts. History is bounded and read-only; there is no replay. Select an activity entry to inspect its question and reply.
 
-## Later Twitch integration
+## Testing your setup
 
-Existing modular Twitch code/scripts remain for later work. The current entrypoint does not load/connect Twitch. Remembered connection choice, live-only viewer intake and stream-end behavior are not yet integrated. No real app/channel/reward is configured. When separately authorized, `npm run twitch:login` authorizes the broadcaster; `npm run twitch:reward` explicitly creates/checks the app-owned required-text reward. Existing provisional defaults are Ask Tyrone, 1000 points and a 60-second global cooldown. No startup action creates rewards.
+Tests open in dialogs from Settings, with the form and results together. A plain Back button sits at the top-left inside detail screens. Successes use green checks, warnings amber and failures red, with readable status text. Save configuration changes before testing. **Configured** means settings are saved; **Check connection** authenticates credentials without generating text or speech. A successful output test separately establishes that the chosen model or voice worked for that request.
 
-The retained intake uses one shared `Name: question` reward, completion fulfillment, rejection/cancellation refunds and durable settlement without replay. Ordinary chat is not read. These paths have mock coverage, not current real-Twitch evidence. OBS linking is deferred.
+- **Generation → Test generation:** enter a message and generate a response on the same page. A character prompt is optional. Speech, character voices and OBS are not required.
+- **Speech → Test speech:** choose an assigned character voice or enter a Fish voice ID, enter a phrase, then generate speech. A browser audio player lets you hear and replay that preview. Character instructions, generation and OBS are not required. The voice ID is remembered when moving to the OBS test during the same browser session.
+- **OBS output → Test OBS output:** send a fixed short phrase through the normal playback queue. Speech configuration, an active audio source, replies on and an empty queue are required. This does not test generation. The app reports source playback; you must confirm OBS monitoring and recording yourself. Closing the dialog does not stop this queued test; reopen it or use Activity to inspect/cancel it.
 
-## Development
+Generation and speech previews use the saved provider and account allowance, may incur charges, and never enter Activity or the private dialogue log. One provider check or preview runs at a time; connection requests have a 10-second timeout and previews a 45-second limit. Cancel, closing its test, leaving the page or saving provider/character changes cancels pending work. Successful saves cancel previews in other management tabs too; rejected saves keep the current preview. The browser preview volume is separate from OBS and the app's queued-output volume. OBS output tests appear in Activity and are logged, with normal queue cancellation/cooldown rules.
 
-The production Activity screen uses React, Tailwind and editable shadcn components.
-TanStack Query polls public server state; commands are serialized and never retried
-automatically. Settings retains its persistent forms and draft handling. Both browser
-pages use the charcoal/peach theme and locally bundled Outfit font. Use `npm run demo`
-for synthetic generation/audio without provider or Twitch calls.
+## Provider configuration
 
-```powershell
-npm run build
-npm run test:offline
-npm run check:tools
-npm run format:check
-```
+Generation and hosted speech are independently configured. Keys must belong to the selected services; an arbitrary provider's API key is not interchangeable with an OpenRouter or Fish key.
 
-`build` runs strict server/browser TypeScript and Vite. `test:offline` runs twelve service-independent test files. `check:tools` probes the guarded installed Codex CLI against a fake loopback provider. `npm test` runs all thirteen files. Candidate checks use `npm run check:tools -- --candidate-version=X.Y.Z`; passing does not approve changing the guard. No test command authorizes live allowance. [Verification](docs/verification.md) owns evidence and limitations.
+OpenRouter accepts one exact `organization/model` ID, including supported `:free` IDs. The app does not restrict routing to free prices. It sends no tools, plugins or model fallback list, and disables provider fallback. The maximum token setting is 64–16384, with a 1024 default; reasoning may consume that allowance. Spoken replies are limited to 60 words. Incomplete or overlength results are rejected without retry or truncation. The selected model and account determine access and charges; review those on [OpenRouter](https://openrouter.ai/models).
 
-`npm run format` uses pinned development-only Prettier. For development, run `npm run dev:browser` and `npm run dev:server` separately, wait for the browser build, then refresh after changes. Server restarts reset queued work.
+Fish Audio requires an API key and each character's 32-character hexadecimal voice ID. New setup uses **S2.1 Pro Free** (`s2.1-pro-free`). Change engines in **Settings → Speech → Change configuration**, then save; no code change is needed for supported Fish engines. Existing explicitly saved/environment engine choices are preserved. Generation and speech remain independently configured; changing the speech engine does not change generation or character prompts. No engine fallback is configured by this app.
 
-Explicit later-stage auditions consume configured allowance:
+The free engine is the same model as paid `s2.1-pro`, with fair-use limits, no uptime/latency guarantee and possible request retention for model improvement. Fish currently advertises the free offer through **November 30, 2026**, with restrictions for some commercial scenarios; confirm current terms before deployment. See the [free API offer](https://fish.audio/blog/s2-1-pro-free-api/) and [model guide](https://docs.fish.audio/developer-guide/models-pricing/choosing-a-model). Paid engines use **Developer API credit**, which is separate from Fish website credits; remaining website messages do not establish API allowance. HTTP 402 means the API rejected billing/model access, not proof that website credits are exhausted. Review [API pricing](https://docs.fish.audio/developer-guide/models-pricing/pricing-and-rate-limits). Saving a key or launching the app makes no speech request, and the app never automatically switches to paid inference if free access fails.
 
-```powershell
-npm run ask -- "Tyrone: Your question"
-npm run speak -- "Tyrone: Your fixed audition text"
-npm run speak -- --question "Tyrone: Your question"
-```
+Generation uses OpenRouter. An existing unsupported provider selection is left unconfigured; it never silently switches to API inference. Explicitly save OpenRouter configuration before use. If `MOMOI_TTS_TEXT_PROVIDER` is inherited at launch, change that override to `openrouter` first. Private settings and account caches are preserved.
 
-Audition output may contain private dialogue. `.generated/` owns builds, packages, auditions and check reports. `.local/` owns private configuration, accounts/recovery and logs. Do not share that folder or account caches. Diagnostics redact provider failures.
+## Browser management and private configuration
 
-[Boundaries](docs/architecture.md) · [Decisions](PROJECT_HANDOFF.md) · [Instructions](AGENTS.md)
+Generation and Speech have their own settings pages; Characters has a separate list and detail editor. Save/Discard controls keep changes deliberate, and drafts survive navigation within management. Saved provider/model and credential status are shown before editing. Change configuration opens the form; Replace key opens the key input. Blank replacements retain saved keys. Remove key requires confirmation and preserves other settings; inherited launch keys must be removed from their environment instead. Saved API keys never return to the page. The character editor loads only the selected character's prompt and voice for editing. Active requests keep their original settings. A question keeps the character instructions accepted with it; waiting work picks up current provider/model and voice settings before processing. Set volume in OBS.
+
+Private state lives in `.local/` beside the app. Do not send that folder to another person or copy it into a release package.
+
+| File | Purpose |
+| --- | --- |
+| `generation.env` | Explicit OpenRouter selection, model and API key. |
+| `fish.env` | Speech key, optional `FISH_MODEL` override and existing file-based voice assignments. |
+| `characters.json` | Private character prompt/voice edits made in management. |
+| `app.json` | Setup progress, retained launch-volume default and remembered Twitch connection choice. |
+| `twitch.env` | Twitch client/channel/reward configuration. |
+| `dialogue.jsonl` | Private question/reply review log. |
+| `launcher*.log` | Private startup diagnostics. |
+
+Public templates are in `config/examples/`. Inherited environment settings override saved file values; management identifies relevant provider overrides. The port defaults to 3210 and can be set through `MOMOI_TTS_PLAYBACK_PORT` before launch. Queue duration overrides are `MOMOI_TTS_VIEWER_COOLDOWN_MS`, `MOMOI_TTS_GLOBAL_COOLDOWN_MS` and `MOMOI_TTS_WAITING_EXPIRY_MS`; invalid values use bounded defaults. Invalid Twitch configuration leaves its connection unavailable with a repair message; Settings and independent provider tests remain available. Repair that private configuration and restart before connecting it.
+
+## Characters
+
+Open **Characters** and select an entry to edit its instructions and voice. Save stores private overrides in `.local/characters.json`; the shipped character files remain intact. Instructions must be nonempty and fit within 6000 UTF-8 bytes. Voice IDs contain 32 hexadecimal characters; clearing a voice leaves the character unconfigured. An inherited voice override is displayed but cannot be changed until its launch override is removed. Every character needs a voice before full requests are enabled.
+
+`characters/catalog.json` defines the available character IDs/names; `characters/prompts/` supplies their initial instructions. Adding/removing a character or changing its catalog name still requires those trusted files and **App options → Diagnostics → Reload character files**, or an app restart. Browser creation of catalog entries is not implemented.
+
+Input is `Name: question`; names are case-insensitive. There is no default character. Questions are limited to 1000 characters. Routine status exposes names and configured status. Prompt and voice details are loaded only by the local character editor; OBS's player never receives them.
+
+## OBS audio source
+
+Add one OBS Browser source at `http://127.0.0.1:3210/player`, using your configured port. Enable **Control audio via OBS** for a separate mixer source. Leave **Shutdown source when not visible** and **Refresh browser when scene becomes active** off. Reuse the same existing source across scenes. Close ordinary browser `/player` tabs so they do not own audio.
+
+The source is visually blank. Confirm recording/stream track assignments and headphone monitoring separately in OBS; avoid capturing monitored audio again through Desktop Audio. OBS versions may label the monitoring option differently. If management reports blocked audio, use OBS **Interact** and click the blank page.
+
+Only one player owns audio. Additional players stay silent. Refreshing or disconnecting the owner cancels unfinished work and turns replies off. Reconnect and explicitly turn replies on; interrupted work is not replayed. OBS owns audio routing and monitoring; the app cannot infer that a heard reply reached the stream.
+
+MomoiTTS controls affect only its own replies. Other stream alerts have their own queues and may overlap; use OBS to manage the mix. Muted acknowledged playback still completes and fulfills a redemption.
+
+## Channel Points
+
+Twitch setup currently uses assisted terminal commands and private configuration. It requires a broadcaster eligible for Channel Points, a Twitch Public application client ID and an app-owned required-text reward. Keep the client ID stable: Twitch permits settlement only through the app that created the reward.
+
+1. Copy `config/examples/twitch.env.example` to `.local/twitch.env`. Supply the public client ID, broadcaster login and intended reward title/cost. The neutral provisional reward is **Ask a character**, 1000 points; choose the actual title/cost before creation.
+2. Open a terminal in the app folder and run `npm run twitch:login`. Follow the displayed Twitch activation instructions as the broadcaster. Tokens are saved privately.
+3. Run `npm run twitch:reward` to explicitly create/check the app-owned reward. Startup and Connect never create rewards.
+4. Launch the app, keep OBS's source active, then use **Settings → Twitch → Connect Twitch**. Wait for reconciliation and click **Turn replies on** when ready. Intake accepts questions only while the channel is live.
+
+Connect remembers that choice for later launches; Disconnect remembers the opposite. Replies still start off. Invalid, offline, replies-off, full or failed requests are canceled for refund; successful acknowledged playback fulfills them. Stream end cancels unfinished Channel Points work. Refund rules are fixed; there are no pause or stream-end policy overrides.
+
+Disconnect/reconnect gaps cancel unfinished Twitch work. A separate durable settlement journal retries pending outcomes without replaying old requests. A pending cancellation is not a confirmed refund. A crash between completed playback and durable settlement may refund a just-played reply. Before changing reward/account configuration, settle pending work with the same configuration. Ordinary chat is not read.
+
+## Private dialogue log
+
+`.local/dialogue.jsonl` records accepted/rejected input, generated dialogue and final outcomes, with IDs, timestamps, character and generation metadata. It excludes saved credentials, voice IDs, prompt bodies and raw provider errors. OBS output tests are logged; direct generation/speech previews are not queued or logged. Records persist before playback completes and survive restart, but are never served over HTTP or used for replay/training.
+
+Writes are flushed to disk. A failure appears in diagnostics and does not prevent cancellation or points settlement. Retention and future review tooling are undecided; there is no automatic deletion.
+
+## Troubleshooting
+
+| Symptom | Action |
+| --- | --- |
+| Website refuses connection | Start Setup/Launch, wait for readiness, then reopen management. Check the startup error or private launcher logs if it fails. |
+| Setup stays incomplete | Configure generation, speech model/key and every character's voice; saved credentials alone do not prove provider access. |
+| Existing app has different settings | Shut down from the application menu, then launch again. Page refresh does not restart the service. |
+| Blank player | Expected. Check management's player/audio status. |
+| No reply heard | Confirm replies are on, active player, mute, OBS volume and output tracks. Close competing player tabs. |
+| Cooldown message | Wait the stated duration before another submission. |
+| Replies off after source refresh or reconnect | Explicitly turn replies on. Interrupted work is discarded. |
+| Provider request fails | Speech failures in Activity show a safe HTTP status/reason or a timeout/network/audio error. Check the saved exact model, key, voice and account access/credit. A successful connection check establishes authentication, not speech access or credit. The app does not select another model or automatically retry. |
+| Twitch outcome pending | Reconnect with the same client/channel/reward configuration to retry settlement; check the actual outcome in Twitch. |
+
+Development commands and implementation boundaries live in the source repository's `docs/architecture.md`; test evidence and remaining live-validation limits live in `docs/verification.md`. These developer documents are not part of the product ZIP.

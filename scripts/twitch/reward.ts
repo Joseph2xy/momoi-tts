@@ -1,7 +1,8 @@
 import { ApiClient } from '@twurple/api';
 import { RefreshingAuthProvider, getTokenInfo } from '@twurple/auth';
-import { readTwitchConfig, redemptionScope } from '../../src/twitch/config.ts';
-import { loadToken, saveToken } from '../../src/twitch/token-store.ts';
+import { redemptionScope } from '../../src/twitch/config.ts';
+import { readTwitchConfig } from '../../src/twitch/config.ts';
+import { loadToken, saveToken, tokenFile } from '../../src/twitch/token-store.ts';
 import { createReward } from '../../src/twitch/reward.ts';
 
 // Explicit setup only. App startup/connect never creates or edits a reward.
@@ -12,14 +13,16 @@ const watchdog = setTimeout(() => {
 }, 46_000);
 watchdog.unref();
 try {
+  if (process.argv.length > 2) throw new Error('Unknown setup option.');
   const config = readTwitchConfig(process.env);
+  const file = tokenFile;
   if (!config) throw new Error();
-  const saved = await loadToken();
+  const saved = await loadToken(file);
   if (saved.clientId !== config.clientId) throw new Error();
   const auth = new RefreshingAuthProvider({ clientId: config.clientId });
   let writes = Promise.resolve();
   auth.onRefresh((userId, token) => {
-    writes = writes.then(() => saveToken({ clientId: config.clientId, userId, token }));
+    writes = writes.then(() => saveToken({ clientId: config.clientId, userId, token }, file));
     void writes.catch(() => {}); // The awaited chain below reports a fixed error.
   });
   const userId = await auth.addUserForToken(saved.token);

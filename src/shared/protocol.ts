@@ -2,7 +2,6 @@ export type PlaybackStatus =
   'idle' | 'ready' | 'playing' | 'blocked' | 'completed' | 'stopped' | 'failed';
 export interface PlaybackClip {
   id: string;
-  label: string;
   url: string;
 }
 export interface PlaybackState {
@@ -10,7 +9,6 @@ export interface PlaybackState {
   status: PlaybackStatus;
   clip: PlaybackClip | null;
   playerConnected: boolean;
-  speechPaused: boolean;
   progress: { elapsedSeconds: number; durationSeconds: number } | null;
   muted: boolean;
   volume: number;
@@ -18,33 +16,34 @@ export interface PlaybackState {
   canQuit?: boolean;
   queue?: QueueState;
   twitch?: TwitchState;
+  logging?: { available: boolean; failed: boolean };
 }
 
-export type SettingsSection = 'generation' | 'speech' | 'characters' | 'playback' | 'application';
+export type SettingsSection = 'generation' | 'speech' | 'playback' | 'application';
 export interface ManagementState {
   revision: number;
   pending: boolean;
   setupSeen: boolean;
-  demo: boolean;
   generation: {
-    provider: '' | 'openrouter' | 'codex';
+    provider: '' | 'openrouter';
     model: string;
     maxTokens: number;
     keyConfigured: boolean;
     ready: boolean;
   };
-  speech: { provider: 'fish'; keyConfigured: boolean; ready: boolean };
+  speech: { provider: 'fish'; model: string; keyConfigured: boolean; ready: boolean };
   characters: { id: string; name: string; voiceConfigured: boolean }[];
   volume: number;
   localReady: boolean;
-  errors: Partial<Record<SettingsSection, string>>;
+  errors: Partial<Record<SettingsSection | 'characters', string>>;
   overrides: string[];
 }
-export interface PlayerState extends PlaybackState {
+export interface PlayerState extends Pick<PlaybackState, 'status' | 'clip' | 'muted' | 'volume'> {
   primary: boolean;
 }
 
 export interface TwitchState {
+  live: boolean | null;
   status: 'disabled' | 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
   channel: string | null;
   rewardTitle: string;
@@ -71,6 +70,11 @@ export interface CharacterInfo {
   id: string;
   name: string;
 }
+export interface CharacterEditorState extends CharacterInfo {
+  prompt: string;
+  voiceId: string;
+  voiceOverridden: boolean;
+}
 export interface RequestEntry {
   id: string;
   viewer: string;
@@ -86,8 +90,8 @@ export interface RequestEntry {
 }
 export interface QueueState {
   characters: CharacterInfo[];
-  mode: 'live' | 'demo' | 'disabled';
-  paused: boolean;
+  mode: 'live' | 'disabled';
+  repliesEnabled: boolean;
   activeId: string | null;
   waitingIds: string[];
   requests: RequestEntry[];

@@ -4,13 +4,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { generateDialogue } from '../src/providers/openrouter/generate-dialogue.ts';
-import { generateConfiguredDialogue, readGenerationConfig } from '../src/app/generation.ts';
-import { livePipeline, demoPipeline } from '../src/app/pipeline.ts';
+import { readGenerationConfig } from '../src/app/generation.ts';
+import { livePipeline } from '../src/app/pipeline.ts';
+import { testPipeline } from './pipeline-fixture.ts';
 import { PlaybackSession } from '../src/playback/session.ts';
 
 const originalFetch = globalThis.fetch;
 const config = readGenerationConfig({
-  TYRONE_TEXT_PROVIDER: 'openrouter',
+  MOMOI_TTS_TEXT_PROVIDER: 'openrouter',
   OPENROUTER_API_KEY: 'dummy-private-key',
   OPENROUTER_MODEL: 'test/model-a:free',
 });
@@ -51,7 +52,6 @@ try {
     assert.deepEqual(body.provider, {
       require_parameters: true,
       allow_fallbacks: false,
-      max_price: { prompt: 0, completion: 0, request: 0 },
     });
     const messages = body.messages as { role: string; content: string }[];
     assert.equal(messages.length, 2);
@@ -68,7 +68,7 @@ try {
       }),
     );
   };
-  const success = await generateConfiguredDialogue(config, input);
+  const success = await generateDialogue(config, input);
   assert.equal(success.dialogue, 'Synthetic final dialogue.');
   assert.equal(success.provider, 'openrouter');
   assert.equal(success.words, 3);
@@ -147,7 +147,7 @@ try {
   for (const [status, expected] of [
     [401, /API key/u],
     [403, /API key/u],
-    [402, /No paid fallback/u],
+    [402, /account credit/u],
     [429, /rate limit/u],
     [404, /unavailable/u],
     [503, /unavailable/u],
@@ -248,7 +248,7 @@ try {
     await new Promise<void>((resolve) => fake.close(() => resolve()));
   }
 
-  // The real app composition dispatches OpenRouter without invoking the Codex CLI.
+  // The real app composition dispatches independent generation and speech adapters.
   let speechCalls = 0;
   globalThis.fetch = async (url, init) => {
     if (url === 'https://openrouter.ai/api/v1/chat/completions') return reply();
@@ -257,7 +257,7 @@ try {
     assert.equal(JSON.parse(String(init?.body)).text, 'Synthetic final dialogue.');
     return new Response(new Uint8Array([0x49, 0x44, 0x33, 0, 0, 0]));
   };
-  const pipeline = livePipeline('dummy-fish-key', testCharacters, config);
+  const pipeline = livePipeline('dummy-fish-key', testCharacters, config, 's2.1-pro');
   const signal = new AbortController().signal;
   assert(
     (
@@ -270,13 +270,13 @@ try {
   );
   assert.equal(speechCalls, 1);
   globalThis.fetch = async () => {
-    throw new Error('Demo must never use a provider.');
+    throw new Error('Fixture must never use a provider.');
   };
-  const demo = demoPipeline();
-  await demo.synthesize(
-    await demo.generate('Demo input', signal, demo.characters[0]!),
+  const fixture = testPipeline();
+  await fixture.synthesize(
+    await fixture.generate('Offline fixture input', signal, fixture.characters[0]!),
     signal,
-    demo.characters[0]!,
+    fixture.characters[0]!,
   );
 
   // Skip/stop while OpenRouter is still fetching: late dialogue never reaches speech.
@@ -302,7 +302,7 @@ try {
     for (let i = 0; i < 40 && !deliver; i++) await delay(5);
     assert(deliver);
     if (action === 'skip') session.queue.skip();
-    else session.queue.stopAndClear();
+    else session.queue.setRepliesEnabled(false);
     deliver(reply());
     await delay(20);
     assert.equal(synthesis, 0);

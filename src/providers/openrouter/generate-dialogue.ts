@@ -1,7 +1,13 @@
 import { dialogueInstructions, validateDialogueInput, type DialogueInput } from '../dialogue.ts';
 import { validateOpenRouterConfig, type OpenRouterConfig } from './config.ts';
 
-class GenerationError extends Error {}
+export class GenerationError extends Error {
+  readonly publicMessage: string;
+  constructor(message: string) {
+    super(message);
+    this.publicMessage = message;
+  }
+}
 const record = (value: unknown): Record<string, unknown> | undefined =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -12,7 +18,7 @@ function providerError(status: number): GenerationError {
     status === 401 || status === 403
       ? 'Check API key and model access.'
       : status === 402
-        ? 'Free access or account allowance is unavailable. No paid fallback was attempted.'
+        ? 'Model access or account credit is unavailable.'
         : status === 429
           ? 'Account allowance or rate limit reached.'
           : status === 400 || status === 404 || status === 422
@@ -46,11 +52,10 @@ export async function generateDialogue(config: OpenRouterConfig, input: Dialogue
           { role: 'system', content: dialogueInstructions(character, maxWords) },
           { role: 'user', content: JSON.stringify({ viewer_question: question }) },
         ],
-        // No tools, plugins, executors, model substitution, or paid routes.
+        // No tools, plugins, executors, or fallback model/provider routing.
         provider: {
           require_parameters: true,
           allow_fallbacks: false,
-          max_price: { prompt: 0, completion: 0, request: 0 },
         },
       }),
     });

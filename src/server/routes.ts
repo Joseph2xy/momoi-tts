@@ -64,12 +64,15 @@ export async function routeCommand(
     queue.remove(body.id);
     return snapshot();
   }
-  if (path === '/api/playback/pause') {
-    session.pause();
+  if (path === '/api/replies/off') {
+    session.setRepliesEnabled(false);
     return snapshot();
   }
-  if (path === '/api/playback/resume') {
-    session.resume();
+  if (path === '/api/replies/on') {
+    session.sweep();
+    if (!session.state.playerConnected)
+      return error(409, 'Connect the OBS audio source before turning replies on.');
+    session.setRepliesEnabled(true);
     return snapshot();
   }
   if (path === '/api/queue/skip') {
@@ -79,11 +82,6 @@ export async function routeCommand(
   }
   if (path === '/api/queue/clear') {
     queue.clear();
-    return snapshot();
-  }
-  if (path === '/api/queue/stop') {
-    session.stop('Stopped and cleared.');
-    queue.stopAndClear();
     return snapshot();
   }
   if (path === '/api/settings') {

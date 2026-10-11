@@ -14,7 +14,7 @@ export default defineConfig({
     rolldownOptions: {
       input: {
         control: fileURLToPath(new URL('./web/index.html', import.meta.url)),
-        testing: fileURLToPath(new URL('./web/testing.html', import.meta.url)),
+        player: fileURLToPath(new URL('./web/player.html', import.meta.url)),
       },
     },
   },

@@ -1,7 +1,7 @@
-import { ensureBrowserBuild } from '../build/browser.ts';
+import { ensureFrontend } from './frontend.ts';
 
 try {
-  await ensureBrowserBuild();
+  await ensureFrontend();
   await import('../../src/app/main.ts');
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'The app could not start.');

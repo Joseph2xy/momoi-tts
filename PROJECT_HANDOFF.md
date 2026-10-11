@@ -1,32 +1,29 @@
 # Project handoff
 
-Updated: 2026-10-09.
+Updated: 2026-10-11.
 
-## Current status
+## Product and agreed scope
 
-The compact Activity feed is accepted as the starter UI, with its design direction in the [product and UX brief](docs/product-ux.md). Local operation includes a reopenable setup checklist, persistent settings/drafts, private credential storage, independent response/voice tests, bounded queues, playback intervention, restart/shutdown, and Windows prerequisite bootstrap. Playback behavior is preserved; the design remains revisable.
+MomoiTTS is a local Windows multi-character Channel Points question-to-speech app with audio-only OBS output, automatic replies when enabled and durable private Q/A logging. Generation and hosted speech remain independent. No new event types, microphone/vision, avatars, autonomous commentary, local models, per-reply approval or additional filtering are agreed.
 
-Normal/demo startup does not connect Twitch. Demo uses synthetic dialogue/audio. Generation supports OpenRouter and guarded Codex CLI; hosted speech uses Fish. Characters are file-based profiles with prompts and assigned voices. [README](README.md) owns usage, [architecture](docs/architecture.md) boundaries, and [verification](docs/verification.md) results and limits.
+Distribution is a prebuilt ZIP with Setup/Launch shortcuts and a user guide. Assisted Node/runtime dependency installation and terminal/device-code Twitch setup are acceptable. The user is not a streamer and will not configure accounts for development validation; use offline fixtures and the existing limited user-reported OBS evidence. Private configuration, credentials, logs and recovery state must be preserved.
 
-Browser code is grouped by management, testing, playback and shared assets; backend provider actions are separate from settings persistence. Activity uses React, Vite, Tailwind, selective shadcn components and Radix interactions, and TanStack Query core; Settings retains persistent HTML forms. No Next.js or TanStack Start app is implemented. Repository: private Joseph2xy/placeholder; naming is provisional. Development uses only `main`, locally and on GitHub.
+## Current state
 
-## Agreed scope
+The architecture, runtime, providers/integrations, browser UI, dependencies, build/package flow and documentation have been reviewed. Failure-path fixes, backend preview cancellation, Radix style compatibility, polling optimization and unused UI/test-fixture cleanup are implemented. Generation is OpenRouter-only; the CLI adapter, prerequisite actions and unused dispatcher are removed. All 25 offline tests, build/typecheck, formatting and archive checks pass. [Audit](docs/audit.md) owns conclusions and product recommendations; [README](README.md) owns use/configuration, [architecture](docs/architecture.md) owns boundaries and [verification](docs/verification.md) owns checks and release evidence.
 
-- The [product and UX brief](docs/product-ux.md) owns the confirmed experience and starter design. Further UI/workflow refinement is authorized while preserving the streaming companion's identity and purpose. Question/reply presentation and waiting-message removal prominence are delegated to design judgment. Discuss consequential product, architecture, or behavior changes; routine design decisions need no repeated approval. Consult official library documentation during implementation.
-- Characters need a name/identifier, prompt, and assigned voice. Production editing is file-based; browser personality editing is not an established requirement.
-- Twitch uses one shared Channel Points reward with Name: question. Missing/unknown names are rejected and refunded after Twitch confirms; no default character. Viewer submissions are live-only, without an offline backlog. Local testing is independent.
-- Twitch should remember the explicit connection choice: reconnect after Connect, remain disconnected after Disconnect. Reconnection must not create rewards or resume a paused queue. This and live-only intake are agreed but not integrated into the current entrypoint.
-- Functional implementation/offline checks precede final model, quality, persona, voice, and fine-tuning evaluation. Functional tests do not select those choices.
+Replies start off. Turning off cancels current/waiting work; late results cannot play. Source loss leaves replies off. Twitch cancels unplayed work for refund and reconnects without replay. Setup/Settings have focused topic pages and independent generation, browser speech and queued OBS checks. Characters supports private prompt/voice editing; catalog add/remove/rename remains file-based.
 
-## Open questions and authorization
+Fish S2.1 Pro Free is the default only when no engine is saved or inherited. Recipient-selected OpenRouter models can be free or paid, with explicit model IDs and no fallback. Saving/startup makes no inference request. Local speech is saved as s2.1-pro-free; one previously authorized short request succeeded. Further trials, account actions, spending and OBS/Twitch changes are not authorized by this handoff.
 
-Submission handling during a live playback pause and active/waiting work at stream end are unresolved. These policies do not block layout work; do not silently settle them through UI changes.
+The cleaned standalone snapshot is on `review/standalone`, without a StreamElements dependency. Its public ZIP and evidence are recorded in verification. The separately requested native integration exploration will branch from this baseline.
 
-Connected testing is deferred. The intended OpenRouter functional trial uses verified free access, with model and request budget agreed separately. No additional trial, paid usage/fallback, installation/sign-in, Twitch account/reward action, or OBS setup is authorized. Continue local testing within the requested task.
+## Unresolved decisions and validation
 
-Final provider/model/persona/voice choices and naming are open. Avatars, vision, microphone input, autonomous commentary, local model hosting, and subscriptions/donations are outside current scope. All choices remain revisable through discussion.
+- Keep the cleaned standalone app without a StreamElements dependency as a fallback, and explore deep native StreamElements integration separately. A local helper is acceptable. The native route must demonstrate a simpler secure setup/control/playback workflow before replacing the standalone product. Branch snapshots and feasibility evidence are recorded separately.
+- The user chose to record character catalog add/remove/rename as a follow-up, not implement it during this audit. Other product gaps and proposed simplifications are in the audit.
+- Validate install/configure/connect/redeem/hear/recover with a willing receiving streamer before describing the product as semi-ready. Real provider quality/latency, OBS routing and Twitch outcomes remain unestablished by offline tests.
+- No final generation model, persona/voice evaluation or allowance guarantee is settled. The earlier paid Fish HTTP 402 and API balance remain unresolved. README owns the time-limited free offer and billing distinctions.
+- Private Twitch client/channel settings remain invalid and preserved. Choose the actual broadcaster/client ID, reward title/cost, live window and redemption budget before authorized account actions.
 
-## Temporary state
-
-Recorded private development configuration selects nvidia/nemotron-3.5-lightning:free with a 4,096-token ceiling and temporary keys. These are not final choices or authorization to use them. Both agreed three-request generation budgets are exhausted. Replace temporary OpenRouter/Fish keys and verify access/terms before separately agreed connected use. Never reproduce saved keys.
-The review server is stopped; port 3224 has no listener. Automatic approval review blocks removal of disposable review artifacts with “blocked by policy”, including explicit nonrecursive deletion. Pending paths are `.generated/ui-review/`, `.generated/ux-review.ts`, `.generated/ux-review-settings/`, `.generated/prototype-ux-review.mp4`, and `web/management/prototype/review.mp4`. They remain ignored and are excluded from packaging. Private settings and account state are preserved.
+Private .local state and the transfer folder's recovery state are retained. Old TYRONE_* application environment names are unsupported; retained development generation settings may need explicit reselection under MOMOI_TTS_* before use. Temporary credentials must be replaced before recipient distribution. Repository naming remains provisional (private Joseph2xy/placeholder).

@@ -5,5 +5,6 @@ export function createAppServer(options: RuntimeOptions = {}) {
   const runtime = new AppRuntime(options);
   const server = createHttpServer(runtime);
   server.once('close', () => runtime.close());
+  server.once('error', () => runtime.close());
   return server;
 }

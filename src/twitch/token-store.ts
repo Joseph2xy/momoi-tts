@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { AccessToken } from '@twurple/auth';
 import { redemptionScope } from './config.ts';
@@ -53,6 +53,10 @@ export async function saveToken(value: SavedToken, file = tokenFile): Promise<vo
   const validated = parseSavedToken(value);
   await mkdir(new URL('./', file), { recursive: true });
   const temporary = new URL(`${file.href}.${randomUUID()}.tmp`);
-  await writeFile(temporary, JSON.stringify(validated), { mode: 0o600 });
-  await rename(temporary, file);
+  try {
+    await writeFile(temporary, JSON.stringify(validated), { mode: 0o600 });
+    await rename(temporary, file);
+  } finally {
+    await rm(temporary, { force: true });
+  }
 }

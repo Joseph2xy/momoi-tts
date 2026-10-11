@@ -1,58 +1,37 @@
 # Verification
 
-Evidence recorded through 2026-10-09. Recorded results do not mean every check ran during the latest documentation edit. [README](../README.md) owns commands; [handoff](../PROJECT_HANDOFF.md) owns authorization, temporary settings, and cleanup blockers.
+Evidence recorded on 2026-10-11. [README](../README.md) owns recipient instructions, [architecture](architecture.md) owns boundaries and [audit](audit.md) owns review conclusions.
 
-## Offline coverage
+## Source checks
 
-The local application checks on 2026-10-09 passed the production build, strict server/browser TypeScript, formatting, whitespace, twelve service-independent test files and the installed Codex probe using a fake loopback provider. Tests use synthetic dialogue/audio, dummy credentials, and mocks without live allowance.
+The current offline suite passes all 25 reported tests across 16 files. TypeScript/browser build, formatting and whitespace checks pass. npm audit reports zero vulnerabilities in the locked dependencies; this is a registry audit result, not proof of absence of defects. Tests use dummy credentials, local HTTP/WebSocket fixtures and mocked providers/SDK services; no live provider, Twitch or StreamElements requests or account actions were made for this audit.
 
-| Area | Checked behavior |
-| --- | --- |
-| Characters/configuration | Catalog/path validation, strict names, distinct character/voice routing, immutable queued identity, configuration bounds, secret-free public state |
-| Queue | One active/two waiting, per-viewer bounds, cooldowns, deduplication, expiry/deadlines, sequential playback, pause/resume, remove/clear/stop, late-result rejection, bounded history |
-| Playback | One audio owner, held speech/watchdogs, departure cancellation, explicit Resume, progress ownership, immutable audio/ranges, acknowledgement retries, no completed-audio access/replay |
-| HTTP/frontend | Built pages/hashed assets, private/generated/catalog/prompt path denial, same-origin/loopback validation |
-| OpenRouter | Exact model/token settings, separated trusted/viewer messages, no tools/plugins/fallback, zero-price caps, output validation, redacted errors, abort/deadline/body bounds |
-| Fish speech | Voice mapping, input/voice validation, cancellation/timeouts, MP3/size validation, redacted errors |
-| Launcher | Configuration/mode matching, private reuse proofs, cold startup without inference, bounded restart returning paused |
-| Management | Atomic persistence, environment precedence, failed-save recovery, blank secret retention, mocked read-only checks, request-pinned adapters, pending settings, profile-refresh notifications |
-| Twitch/SDK | Actual Twurple SDK with mocks: auth/refresh, idempotent reward setup, subscriptions, bounds/deduplication, moderation/reconnect cancellation, settlement/refunds, durable recovery without old playback |
+Coverage includes trusted instruction separation, dialogue-only enforcement, provider request/model mapping, output bounds, secret/error redaction, private character editing, atomic persistence, admission bounds/cooldowns/deduplication/expiry, sequential playback, cancellation, output-owner identity and durable settlement/recovery. New regressions establish stable queue batches and single terminal ownership under reentrant completion/cancellation callbacks; this is not proof of a real-world refund incident.
 
-Codex CLI **0.162.0** passed the installed-version dialogue-only probe. A fake-provider /responses request omitted tools, offered no executors, included viewer input, and completed synthetic dialogue with permitted event types. This establishes the tested local transport boundary, not every live transport or future release. Other versions are rejected by the current guard.
+Provider tests cover cancellation on successful generation/speech saves, character saves and catalog reload, rejected-save preservation, late-result exclusion, HTTP departure cancellation for speech and connection checks, and nonblocking response-body disposal. Fish HTTP failures retain their known status despite stalled/failed disposal. Failed Twitch token/journal replacements retain the original target and remove temporary files. The in-memory settlement implementation is test-only.
 
-Account checks were compared with [OpenRouter's current-key API](https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key) and [Fish's official account resource](https://github.com/fishaudio/fish-audio-python/blob/main/src/fishaudio/resources/account.py). Tests mock authentication and discard response bodies; real account checks were not completed during local integration.
+Browser-state checks verify identical polling results preserve state identity and no-op commands produce only meaningful pending-state transitions. Existing checks establish startup off, turn-off/source-loss cancellation, no replay after turn-on, late generation/speech exclusion, player-lease requirements and offline Twitch-configuration recovery. Credential removal preserves model settings, clears duplicate saved entries, survives reload and rejects inherited removal.
 
 ## Browser evidence
 
-The Activity redesign on 2026-10-09 passed a fresh production build, strict server/browser TypeScript, twelve offline test files and formatting. No provider or CLI adapter changed; the guarded Codex probe evidence above is retained from its earlier run, not newly claimed for this pass.
+The audit used isolated local servers, OS temporary configuration and dummy keys/voices. T3 native preview verified mocked generation without OBS, the default S2.1 Pro Free engine, selecting an assigned character voice, speech test enablement and deferred keyboard-focus restoration after closing its dialog. No real inference or synthesis was dispatched.
 
-T3 review used an isolated demo server, disposable settings, synthetic dialogue/audio and zero review-only cooldowns. Browser interaction and DOM inspection verified:
+Browser inspection reproduced blocked Radix inline style sheets under the previous style policy. After the fix and server restart, dialog scroll-lock and Select sheets had active CSS rules and body scrolling was locked. Scripts remain restricted to self, frames are disallowed and frontend tests check the policy. This establishes the widget regression fix, not a complete visual design review.
 
-- Full question/reply inspection, live status updates in an open dialog, Escape dismissal and focus returning to the originating row or Pause/Resume when that row disappeared.
-- Waiting-message removal, Skip preserving pause, the labeled secondary controls menu, Stop and clear returning paused with no active/waiting work, and keyboard volume changes reaching server state.
-- Settings access and return, unsaved playback drafts surviving navigation, and Discard restoring the saved value.
-- Viewer HTML appearing as literal text in both rows and inspection, with no injected image. History exposes inspection only, without replay or queue commands.
+Earlier isolated-fixture checks established draft preservation, deliberate saves/key removal, semantic feedback, preview cancellation and no horizontal overflow for overview/topic/editor/test screens at 320, 390, 768 and 1024 CSS pixels. Those broad layout checks predate this audit's cleanup. Native resize timed out during this audit; a transient 468-pixel viewport showed no overflow. Screenshot output was stale, so it is not accepted as current aesthetic evidence.
 
-Script-free copies of the built DOM/styles at 1280x800, 600x700, 390x844 and 320x568 kept controls and rows within the viewport. With one held current message, two waiting messages and long synthetic questions, only history was scrollable and retained positive height (about 92px at 320x568). These are limited layout checks, not mobile pointer interaction evidence. Direct preview resizing timed out. Saved preview screenshots were blurred and delayed relative to inspected DOM state; complete visual verification remains open.
+The cleaned Settings overview was checked in an isolated T3 browser at 1280 CSS pixels: Generation, Speech, OBS output and Twitch are the four topics, with no StreamElements setup destination and no horizontal overflow. Native resize timed out again; this is desktop browser evidence, not an OBS/SE.Live dock validation. Review process, helper and empty dummy private folder were removed.
 
-Earlier isolated management reviews also verified the first-use/reopenable checklist, incomplete-setup access, invalid-save feedback, durable saves, blank secret retention, secret replacement clearing, save-response races, profile-refresh revisions, response/voice testing, secondary-tab silence, retained audio across navigation and restart persistence. Those checks were not all repeated during this layout pass. Offline tests continue to cover their backend contracts. Testing owns no audio element. A connected account-check dialog timed out; mock coverage does not establish hands-on connected behavior.
+## Product and recipient limits
 
-## Packaging evidence
+The current ZIP is `.generated/releases/MomoiTTS-20261011-234019-f7ec1a71.zip`, with 65 public entries and three pinned runtime dependency roots. Inspection found no private state, source TypeScript, tests, developer docs, CLI adapter/probes, demo files or obsolete setup helper. Packaging left zero staging directories; superseded public ZIPs were removed after verifying the replacement. Recipient setup remains unverified on a clean PC. Earlier extracted-product evidence established dependency installation, matching-service reuse and restart for an older release with existing Node and dummy settings; it does not establish the current package's recipient installation or actual Node/admin prompts.
 
-The transfer package passed a fresh integration check: production React TSX files, public-state Query integration, component configuration, and the current browser folders are included. Prototype paths, private state, dependencies and generated output are excluded. PowerShell packaging syntax passed, and the temporary verification ZIP was deleted. Fresh destination-PC installation and actual prerequisite installation/sign-in were not exercised.
+One earlier user-authorized Fish request with s2.1-pro-free and a 51-byte phrase returned 50,154 MP3 bytes: first audio 4,310 ms, full response 4,550 ms. It did not establish listening quality, current browser/OBS playback or guarantees. The prior paid HTTP 402 remains unresolved; Developer API balance was not checked. Fish offer/model/pricing documentation was rechecked during this audit; current terms and links live in README.
 
-## Starter cleanup
+Private Twitch configuration remains invalid and unchanged. Offline mocks cannot establish real authorization, reward ownership, fulfillment/refunds, live reconnect behavior or receiving-streamer operation. Durable settlement is asynchronous; a crash after playback can refund a just-played reply. Earlier user-reported OBS monitoring/recording of a synthetic tone is limited evidence, not a full real-provider path. Actual destination-PC routing, duplicate capture and overlap with other stream alerts remain unverified.
 
-On 2026-10-09, the accepted starter passed a fresh production build, strict server/browser TypeScript, twelve offline test files, formatting and whitespace checks after removing unused UI variants, inactive animation classes, duplicate CSS rules and no-op row props. Existing browser evidence above is retained; no fresh browser interaction or screenshot verification is claimed for this cleanup.
+OpenRouter fixtures establish the dialogue-only request/response boundary, including absent tools/plugins/fallbacks and rejection of tool responses. Unsupported retained provider selections reject before dispatch even when other API credentials exist. The removed CLI route has no installed-version or live-subscription validation requirement.
 
-Packaging PowerShell syntax and the six public TSX component inputs were checked. No new transfer ZIP, provider request or CLI probe was produced. The isolated review process was stopped and port 3224 was confirmed to have no listener. Review-file deletion was rejected by automatic approval review; [handoff](../PROJECT_HANDOFF.md#temporary-state) owns the pending paths. Private configuration and account state were preserved.
+## Cleanup
 
-## Connected evidence and limits
-
-OpenRouter generation trials on 2026-10-08 produced no accepted usable dialogue. The tested Gemma free route returned HTTP 429. On nvidia/nemotron-3.5-lightning:free, two replies ended at finish_reason: length at 1,024/4,096-token ceilings and were rejected before speech; reported costs were zero. A third request cancelled locally. Client abort does not prove remote cancellation/refund. Recorded allowance is not evidence of current access; verify [current limits](https://openrouter.ai/docs/api_reference/limits) before agreed use.
-
-Fish s2.1-pro-free trials returned valid MP3s, including a Codex-to-speech-to-playback sample around 31.6 seconds. That sample used Codex CLI 0.160.1 and does not verify the current guarded CLI's live behavior or establish quality/latency guarantees. The recorded [Fish offer](https://fish.audio/blog/s2-1-pro-free-api/) named November 30, 2026 as its end; verify current access, allowance, and commercial terms before agreed speech use.
-
-Live Twitch eligibility/authorization, reward creation, moderation/refunds, and redemption-to-playback are unverified. SDK mocks are not real Twitch results. A crash between playback and durable settlement may refund a just-played reply; recovery does not automatically replay old work.
-
-OBS routing/monitoring, destination-PC behavior, sustained live reliability, current guarded Codex live access, final model/persona/voice quality, production latency, settled billing, ongoing allowance, and commercial licensing remain unverified.
+Unused UI implementations/exports/variants/directives and write-only cookie code are removed; all retained UI exports/dependencies have current consumers. The CLI generation adapter and StreamElements control bridge, their setup pages/templates/tests and obsolete runtime exports are removed; the runtime restart helper has its own current name. Direct ws is test-only; Twitch retains its declared transitive WebSocket runtime. Retired private overlay configuration is ignored and preserved; a regression verifies that it neither starts a transport nor affects launcher reuse. Private state and recovery folders are preserved. Review servers, source helpers, dummy temporary settings and superseded public archives were removed. Automatic approval review rejected the UI and archive shell cleanups with "blocked by policy"; scoped filesystem removal of those identified generated artifacts succeeded. These are observed rejections, not a permanent project restriction.

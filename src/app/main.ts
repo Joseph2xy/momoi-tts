@@ -1,11 +1,11 @@
 import { configuredPipeline } from './provider-actions.ts';
 import { createAppServer } from './server.ts';
 import { SettingsStore } from './settings.ts';
-import { startRestart } from './setup-actions.ts';
+import { startRestart } from './restart.ts';
+import { launchMode } from './launch-mode.ts';
 const args = process.argv.slice(2);
-if (args.some((arg) => !['--demo', '--no-open'].includes(arg)))
-  throw new Error('Unknown app option.');
-const store = new SettingsStore({ demo: args.includes('--demo') });
+launchMode(args);
+const store = new SettingsStore();
 const port = store.port;
 const server = createAppServer({
   pipeline: configuredPipeline(store),
@@ -14,7 +14,7 @@ const server = createAppServer({
   configurationProof: (nonce) => store.proof(nonce),
   onQuit: shutdown,
   onRestart: () => {
-    startRestart(port, store.demo, args.includes('--no-open'));
+    startRestart(port, args.includes('--no-open'));
     shutdown();
   },
 });
@@ -24,10 +24,9 @@ server.once('error', () => {
 });
 server.listen(port, '127.0.0.1', () => {
   console.log(`Local management: http://127.0.0.1:${port}/`);
+  console.log(`OBS audio source: http://127.0.0.1:${port}/player`);
   console.log(
-    store.demo
-      ? 'Demo: synthetic dialogue/audio. Twitch is disabled.'
-      : 'Local management ready. Provider use requires explicit tests or submitted questions. Twitch integration is deferred.',
+    'Local management ready. Twitch connects only after an explicit saved connection choice. Keep the OBS audio source active and turn replies on when ready.',
   );
 });
 let shuttingDown = false;

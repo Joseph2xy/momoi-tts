@@ -1,37 +1,88 @@
 import type { SettingsStore } from './settings.ts';
 import type { QueuePipeline } from '../queue/contracts.ts';
-import { readGenerationConfig, generateConfiguredDialogue } from './generation.ts';
+import { readGenerationConfig } from './generation.ts';
 import { synthesizeSpeech } from '../providers/fish/synthesize-speech.ts';
-import { selectCharacter } from '../characters/input.ts';
-import { demoPipeline, livePipeline } from './pipeline.ts';
-import { RequestInputError } from '../shared/errors.ts';
+import { livePipeline } from './pipeline.ts';
+import { RequestInputError, SpeechFailure } from '../shared/errors.ts';
+import { generateDialogue, GenerationError } from '../providers/openrouter/generate-dialogue.ts';
 
 // Provider composition and explicit checks/tests; private persistence stays in SettingsStore.
 export function configuredPipeline(store: SettingsStore): QueuePipeline | undefined {
   try {
-    if (store.demo) return demoPipeline(store.profiles());
     if (!store.snapshot().localReady) return undefined;
     const env = store.env();
-    return livePipeline(env.FISH_API_KEY!, store.profiles(true), readGenerationConfig(env));
+    return livePipeline(
+      env.FISH_API_KEY!,
+      store.profiles(true),
+      readGenerationConfig(env),
+      env.FISH_MODEL!,
+    );
   } catch {
     return undefined;
   }
 }
-export function voiceTestPipeline(store: SettingsStore): QueuePipeline {
-  if (store.demo) return demoPipeline(store.profiles());
-  const state = store.snapshot();
+export function testText(value: unknown): string {
   if (
-    !state.speech.ready ||
-    state.characters.some((p) => !p.voiceConfigured) ||
-    !state.characters.length
+    typeof value !== 'string' ||
+    !value.trim() ||
+    value.trim().length > 1000 ||
+    Buffer.byteLength(value.trim(), 'utf8') > 4000 ||
+    /[\p{Cc}&&[^\n\r\t]]/v.test(value)
   )
-    throw new RequestInputError('Configure speech and character voices before testing.');
+    throw new RequestInputError(
+      'Enter text containing 1–1000 characters (at most 4000 UTF-8 bytes).',
+    );
+  return value.trim();
+}
+export function testVoiceId(value: unknown): string {
+  if (typeof value !== 'string' || !/^[a-f0-9]{32}$/iu.test(value.trim()))
+    throw new RequestInputError('Enter a voice ID containing 32 hexadecimal characters.');
+  return value.trim();
+}
+export async function testSpeech(
+  store: SettingsStore,
+  body: Record<string, unknown>,
+  signal: AbortSignal,
+) {
+  const text = testText(body.text);
+  const voiceId = testVoiceId(body.voiceId);
+  if (!store.snapshot().speech.ready)
+    throw new RequestInputError(
+      'Save a Fish Audio API key and valid speech engine before testing.',
+    );
+  const env = store.env();
+  try {
+    return (
+      await synthesizeSpeech({
+        text,
+        voiceId,
+        signal,
+        apiKey: env.FISH_API_KEY!,
+        model: env.FISH_MODEL!,
+      })
+    ).audio;
+  } catch (error) {
+    throw new RequestInputError(
+      signal.aborted
+        ? 'Speech test cancelled or timed out.'
+        : error instanceof SpeechFailure
+          ? error.publicMessage
+          : 'Speech test failed. Check saved speech settings.',
+    );
+  }
+}
+export function obsTestPipeline(store: SettingsStore, voiceId: unknown): QueuePipeline {
+  const voice = testVoiceId(voiceId);
+  if (!store.snapshot().speech.ready)
+    throw new RequestInputError('Save speech settings before testing OBS output.');
   const env = store.env();
   return {
     mode: 'live',
-    characters: store.profiles(true),
+    characters: [
+      { id: 'obs-output', name: 'OBS output', prompt: 'Fixed OBS output test.', voiceId: voice },
+    ],
     async generate() {
-      return 'This is a voice test. Your character is ready to speak.';
+      return 'This is the MomoiTTS OBS output test.';
     },
     async synthesize(text, signal, character) {
       return (
@@ -40,32 +91,44 @@ export function voiceTestPipeline(store: SettingsStore): QueuePipeline {
           signal,
           apiKey: env.FISH_API_KEY!,
           voiceId: character.voiceId!,
+          model: env.FISH_MODEL!,
         })
       ).audio;
     },
   };
 }
-export async function testResponse(store: SettingsStore, question: unknown, signal: AbortSignal) {
-  const character = selectCharacter(question, store.profiles());
-  if (store.demo)
-    return await demoPipeline(store.profiles()).generate(
-      character.question,
-      signal,
-      character.character,
-    );
+export async function testResponse(
+  store: SettingsStore,
+  body: Record<string, unknown>,
+  signal: AbortSignal,
+) {
+  const question = testText(body.text);
+  let prompt =
+    'You are a helpful conversational assistant. Answer briefly in natural spoken dialogue.';
+  if (body.character !== undefined) {
+    if (typeof body.character !== 'string')
+      throw new RequestInputError('Select a known character or leave it unselected.');
+    const profile = store.profiles().find((profile) => profile.id === body.character);
+    if (!profile) throw new RequestInputError('Unknown character.');
+    prompt = profile.prompt;
+  }
   if (!store.snapshot().generation.ready)
     throw new RequestInputError('Configure generation before testing.');
   try {
     return (
-      await generateConfiguredDialogue(readGenerationConfig(store.env()), {
-        question: character.question,
-        character: character.character.prompt,
+      await generateDialogue(readGenerationConfig(store.env()), {
+        question,
+        character: prompt,
         signal,
       })
     ).dialogue;
-  } catch {
+  } catch (error) {
     throw new RequestInputError(
-      'Response test failed or timed out. Check provider access and the saved model settings.',
+      signal.aborted
+        ? 'Response test cancelled or timed out.'
+        : error instanceof GenerationError
+          ? error.publicMessage
+          : 'Response test failed or timed out. Check provider access and the saved model settings.',
     );
   }
 }
@@ -73,16 +136,13 @@ export async function checkConnection(
   store: SettingsStore,
   section: unknown,
   fetcher: typeof fetch = fetch,
+  signal: AbortSignal = new AbortController().signal,
 ) {
   if (section !== 'generation' && section !== 'speech')
     throw new RequestInputError('Unknown connection check.');
   const env = store.env();
-  if (section === 'generation' && env.TYRONE_TEXT_PROVIDER !== 'openrouter')
-    throw new RequestInputError(
-      'For Codex, use Check prerequisites. Choose OpenRouter for an API-key connection check.',
-    );
-  if (store.demo)
-    return { ok: true, message: 'Demo check only. No connected provider was contacted.' };
+  if (section === 'generation' && env.MOMOI_TTS_TEXT_PROVIDER !== 'openrouter')
+    throw new RequestInputError('Save OpenRouter configuration before checking its connection.');
   const key = section === 'generation' ? env.OPENROUTER_API_KEY : env.FISH_API_KEY;
   if (!key) throw new RequestInputError('Configure the saved API key first.');
   try {
@@ -94,10 +154,10 @@ export async function checkConnection(
         method: 'GET',
         redirect: 'error',
         headers: { Authorization: `Bearer ${key}` },
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
       },
     );
-    await response.body?.cancel();
+    void response.body?.cancel().catch(() => {});
     return {
       ok: response.ok,
       message: response.ok

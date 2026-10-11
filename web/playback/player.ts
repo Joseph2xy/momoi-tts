@@ -1,17 +1,13 @@
 import type { PlayerState } from '../../src/shared/protocol.ts';
 
-export function startPlayback(onOwnership: (primary: boolean | null) => void) {
+export function startPlayback() {
   const session = crypto.randomUUID();
-  const status = document.querySelector<HTMLElement>('#playback-note')!;
-  const enable = document.querySelector<HTMLButtonElement>('#enable')!;
   let audio: HTMLAudioElement | null = null;
   let currentId: string | null = null;
   let attemptedId: string | null = null;
   let stopped = false;
   let blocked = false;
   let starting = false;
-  let held = false;
-  let hasPlayed = false;
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
   let lifecycle = 0;
 
@@ -29,9 +25,6 @@ export function startPlayback(onOwnership: (primary: boolean | null) => void) {
     currentId = null;
     blocked = false;
     starting = false;
-    held = false;
-    hasPlayed = false;
-    enable.hidden = true;
   }
   async function request<T>(route: string, body: unknown): Promise<T> {
     const response = await fetch(route, {
@@ -54,30 +47,23 @@ export function startPlayback(onOwnership: (primary: boolean | null) => void) {
   async function start() {
     const target = audio;
     const id = currentId;
-    if (!target || !id || starting || held) return;
+    if (!target || !id || starting) return;
     starting = true;
     try {
-      // Called directly by the Enable button when a user gesture is required.
+      // OBS normally allows autoplay; Interact can supply a gesture if it is blocked.
       await target.play();
       if (audio !== target || currentId !== id) {
         target.pause();
         return;
       }
-      hasPlayed = true;
-      if (held) {
-        target.pause();
-        return;
-      }
       blocked = false;
-      enable.hidden = true;
+
       if (!(await report(id, 'playing')) && audio === target && !target.ended) reset();
     } catch (error) {
       if (audio !== target || currentId !== id) return;
-      if (held && error instanceof DOMException && error.name === 'AbortError') return;
       if (error instanceof DOMException && ['NotAllowedError', 'AbortError'].includes(error.name)) {
         blocked = true;
-        enable.hidden = false;
-        status.textContent = 'Click Enable audio to allow playback.';
+
         if (!(await report(id, 'blocked')) && audio === target) reset();
       } else {
         await report(id, 'failed');
@@ -87,9 +73,11 @@ export function startPlayback(onOwnership: (primary: boolean | null) => void) {
       if (audio === target) starting = false;
     }
   }
-  enable.addEventListener('click', () => {
+  const unlock = () => {
     if (blocked) void start();
-  });
+  };
+  document.addEventListener('pointerdown', unlock);
+  document.addEventListener('keydown', unlock);
 
   async function poll() {
     if (stopped) return;
@@ -101,19 +89,15 @@ export function startPlayback(onOwnership: (primary: boolean | null) => void) {
           : undefined;
       const state = await request<PlayerState>('/api/player/poll', { session, progress });
       if (stopped || generation !== lifecycle) return;
-      onOwnership(state.primary);
+
       if (!state.primary) {
         reset();
-        status.textContent = 'Another app tab owns audio playback. This tab is silent.';
       } else {
-        status.textContent =
-          blocked && !state.speechPaused ? 'Click Enable audio to allow playback.' : '';
         const playable = ['ready', 'playing', 'blocked'].includes(state.status);
         if (!playable || !state.clip) reset();
         else {
           if (audio && currentId !== state.clip.id) reset();
-          held = state.speechPaused;
-          enable.hidden = held || !blocked;
+
           if (!audio && attemptedId !== state.clip.id) {
             const id = state.clip.id;
             attemptedId = id;
@@ -124,13 +108,10 @@ export function startPlayback(onOwnership: (primary: boolean | null) => void) {
             target.volume = state.volume;
             // Polling retries completion until the server confirms it in its state.
             // Keep the ended element so a lost acknowledgement cannot replay it.
-            target.onended = () => {
-              if (audio === target && currentId === id) status.textContent = 'Finishing playback…';
-            };
             target.onpause = () => {
-              if (audio === target && currentId === id && !target.ended && target.paused && !held) {
+              if (audio === target && currentId === id && !target.ended && target.paused) {
                 blocked = true;
-                enable.hidden = false;
+
                 void report(id, 'blocked');
               }
             };
@@ -142,7 +123,7 @@ export function startPlayback(onOwnership: (primary: boolean | null) => void) {
             };
             audio = target;
             document.body.append(target);
-            if (!held) void start();
+            void start();
           } else if (!audio && attemptedId === state.clip.id) {
             // A disconnected or failed response must never start again by itself.
             await report(state.clip.id, 'failed');
@@ -154,10 +135,6 @@ export function startPlayback(onOwnership: (primary: boolean | null) => void) {
               // A very short clip can finish before the playing report arrives.
               if (state.status !== 'playing') await report(currentId, 'playing');
               await report(currentId, 'ended');
-            } else if (held) audio.pause();
-            else if (audio.paused && !blocked && !starting) {
-              // An intentional pause retains this element and its playback position.
-              if (hasPlayed || state.status === 'ready' || state.status === 'playing') void start();
             }
           }
         }
@@ -165,9 +142,6 @@ export function startPlayback(onOwnership: (primary: boolean | null) => void) {
     } catch {
       if (stopped || generation !== lifecycle) return;
       reset();
-      onOwnership(null);
-      status.textContent =
-        'Audio disconnected. Current playback stopped; resume after reconnecting.';
     }
     if (!stopped && generation === lifecycle)
       pollTimer = setTimeout(() => {
@@ -192,6 +166,4 @@ export function startPlayback(onOwnership: (primary: boolean | null) => void) {
     }
   });
   void poll();
-
-  return { stop };
 }
