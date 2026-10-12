@@ -16,7 +16,7 @@ Replies start off. Turning off cancels current/waiting work; late results cannot
 
 Fish S2.1 Pro Free is the default only when no engine is saved or inherited. Recipient-selected OpenRouter models can be free or paid, with explicit model IDs and no fallback. Saving/startup makes no inference request. Local speech is saved as s2.1-pro-free; one previously authorized short request succeeded. Further trials, account actions, spending and OBS/Twitch changes are not authorized by this handoff.
 
-The standalone app is the selected product direction, with development consolidated on `main` and no parallel product branches. Its public ZIP and evidence are recorded in verification. The next milestone is under discussion; the audit owns proposed setup improvements, character authoring and recipient validation priorities.
+The standalone app is the selected product direction, with development consolidated on `main` and no parallel product branches. Its public ZIP and evidence are recorded in verification. Guided Twitch setup is the next milestone under discussion: move authorization and explicit reward setup into the local interface. Ownership of the Twitch application registration remains to be agreed; no new account actions or setup implementation are authorized by this discussion.
 
 ## Unresolved decisions and validation
 
