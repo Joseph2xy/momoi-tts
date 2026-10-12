@@ -1,6 +1,6 @@
 # Project handoff
 
-Updated: 2026-10-11.
+Updated: 2026-10-12.
 
 ## Product and agreed scope
 
@@ -16,11 +16,10 @@ Replies start off. Turning off cancels current/waiting work; late results cannot
 
 Fish S2.1 Pro Free is the default only when no engine is saved or inherited. Recipient-selected OpenRouter models can be free or paid, with explicit model IDs and no fallback. Saving/startup makes no inference request. Local speech is saved as s2.1-pro-free; one previously authorized short request succeeded. Further trials, account actions, spending and OBS/Twitch changes are not authorized by this handoff.
 
-The cleaned standalone snapshot is on `review/standalone`, without a StreamElements dependency. Its public ZIP and evidence are recorded in verification. The separately requested native integration exploration will branch from this baseline.
+The standalone app is the selected product direction on `review/standalone`. Its public ZIP and evidence are recorded in verification. Focus on simplifying setup, polishing operation and recipient validation without adding integrations or replacing proven lifecycle safeguards.
 
 ## Unresolved decisions and validation
 
-- Keep the cleaned standalone app without a StreamElements dependency as a fallback, and explore deep native StreamElements integration separately. A local helper is acceptable. The native route must demonstrate a simpler secure setup/control/playback workflow before replacing the standalone product. Branch snapshots and feasibility evidence are recorded separately.
 - The user chose to record character catalog add/remove/rename as a follow-up, not implement it during this audit. Other product gaps and proposed simplifications are in the audit.
 - Validate install/configure/connect/redeem/hear/recover with a willing receiving streamer before describing the product as semi-ready. Real provider quality/latency, OBS routing and Twitch outcomes remain unestablished by offline tests.
 - No final generation model, persona/voice evaluation or allowance guarantee is settled. The earlier paid Fish HTTP 402 and API balance remain unresolved. README owns the time-limited free offer and billing distinctions.

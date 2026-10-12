@@ -1,10 +1,12 @@
 # Verification
 
-Evidence recorded on 2026-10-11. [README](../README.md) owns recipient instructions, [architecture](architecture.md) owns boundaries and [audit](audit.md) owns review conclusions.
+Audit evidence recorded on 2026-10-11; standalone source and package checks refreshed on 2026-10-12. [README](../README.md) owns recipient instructions, [architecture](architecture.md) owns boundaries and [audit](audit.md) owns review conclusions.
 
 ## Source checks
 
-The current offline suite passes all 25 reported tests across 16 files. TypeScript/browser build, formatting and whitespace checks pass. npm audit reports zero vulnerabilities in the locked dependencies; this is a registry audit result, not proof of absence of defects. Tests use dummy credentials, local HTTP/WebSocket fixtures and mocked providers/SDK services; no live provider, Twitch or StreamElements requests or account actions were made for this audit.
+The selected standalone branch was rechecked on 2026-10-12: all 25 offline tests across 16 files passed, including the browser build; typecheck, formatting and whitespace checks passed. Obsolete fixtures/references and abandoned development work were removed. Production runtime/browser/launcher code matches the audited standalone baseline. The existing 65-entry product archive was re-inspected for public inputs and current documentation; no replacement package was needed for developer-document/test-only changes. Private settings and recovery state remain intact. This run used no paid inference, account actions or OBS changes.
+
+The current offline suite passes all 25 reported tests across 16 files. TypeScript/browser build, formatting and whitespace checks pass. npm audit reports zero vulnerabilities in the locked dependencies; this is a registry audit result, not proof of absence of defects. Tests use dummy credentials, local HTTP/WebSocket fixtures and mocked providers/SDK services; no live provider requests or account actions were made for this audit.
 
 Coverage includes trusted instruction separation, dialogue-only enforcement, provider request/model mapping, output bounds, secret/error redaction, private character editing, atomic persistence, admission bounds/cooldowns/deduplication/expiry, sequential playback, cancellation, output-owner identity and durable settlement/recovery. New regressions establish stable queue batches and single terminal ownership under reentrant completion/cancellation callbacks; this is not proof of a real-world refund incident.
 
@@ -20,7 +22,7 @@ Browser inspection reproduced blocked Radix inline style sheets under the previo
 
 Earlier isolated-fixture checks established draft preservation, deliberate saves/key removal, semantic feedback, preview cancellation and no horizontal overflow for overview/topic/editor/test screens at 320, 390, 768 and 1024 CSS pixels. Those broad layout checks predate this audit's cleanup. Native resize timed out during this audit; a transient 468-pixel viewport showed no overflow. Screenshot output was stale, so it is not accepted as current aesthetic evidence.
 
-The cleaned Settings overview was checked in an isolated T3 browser at 1280 CSS pixels: Generation, Speech, OBS output and Twitch are the four topics, with no StreamElements setup destination and no horizontal overflow. Native resize timed out again; this is desktop browser evidence, not an OBS/SE.Live dock validation. Review process, helper and empty dummy private folder were removed.
+The cleaned Settings overview was checked in an isolated T3 browser at 1280 CSS pixels: Generation, Speech, OBS output and Twitch are the four topics, with no horizontal overflow. Native resize timed out again; this is desktop browser evidence. Review process, helper and empty dummy private folder were removed.
 
 ## Product and recipient limits
 
@@ -34,4 +36,4 @@ OpenRouter fixtures establish the dialogue-only request/response boundary, inclu
 
 ## Cleanup
 
-Unused UI implementations/exports/variants/directives and write-only cookie code are removed; all retained UI exports/dependencies have current consumers. The CLI generation adapter and StreamElements control bridge, their setup pages/templates/tests and obsolete runtime exports are removed; the runtime restart helper has its own current name. Direct ws is test-only; Twitch retains its declared transitive WebSocket runtime. Retired private overlay configuration is ignored and preserved; a regression verifies that it neither starts a transport nor affects launcher reuse. Private state and recovery folders are preserved. Review servers, source helpers, dummy temporary settings and superseded public archives were removed. Automatic approval review rejected the UI and archive shell cleanups with "blocked by policy"; scoped filesystem removal of those identified generated artifacts succeeded. These are observed rejections, not a permanent project restriction.
+Unused UI implementations/exports/variants/directives and write-only cookie code are removed; all retained UI exports/dependencies have current consumers. The CLI generation adapter, its setup actions/tests and obsolete runtime exports are removed; the runtime restart helper has its own current name. Direct ws is test-only; Twitch retains its declared transitive WebSocket runtime. Private state and recovery folders are preserved. Review servers, source helpers, dummy temporary settings, abandoned integration work and superseded public archives were removed. Automatic approval review rejected combined shell cleanup commands with "blocked by policy"; individually scoped patch/filesystem operations completed the authorized cleanup. These are observed rejections, not a permanent project restriction.

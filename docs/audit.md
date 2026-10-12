@@ -10,9 +10,9 @@ Independent generation, browser speech and OBS checks have distinct purposes: th
 
 Generation is OpenRouter-only, avoiding CLI sign-in/version maintenance and executor-capability validation. Unsupported retained provider selections require an explicit configuration save before inference; private credentials/caches remain intact.
 
-The cleaned standalone app uses its own management interface and OBS audio source, without a StreamElements account, token, transport or control dependency. Keys, character instructions and dialogue logs stay private in the local helper. Its controls affect only its own queue; other stream alerts may overlap.
+The standalone app uses its own management interface and OBS audio source. Keys, character instructions and dialogue logs stay private. Its controls affect only its own queue; other stream alerts may overlap.
 
-The user requested a separate branch for exploring deep native StreamElements integration, with this standalone version retained as a fallback. A local helper is acceptable; the native route is conditional on practical setup, reliable playback and secure handling of private settings. This branch owns the standalone product; native extension research and prototype evidence belong on the separate integration branch.
+The selected direction is to polish the standalone product. Keep setup and everyday controls together, preserve independently replaceable generation/speech and validate the recipient workflow before expanding scope.
 
 ## Implementation and failure paths
 
@@ -26,14 +26,14 @@ Browser build reuse fingerprints its shared Fish model definitions as well as br
 
 ## Product gaps and decisions
 
-| Topic | Assessment |
-| --- | --- |
-| Character catalog authoring | Add/remove/rename in Characters is the clearest missing product capability. The user chose to record it for follow-up; current prompt/voice editing and trusted-file catalog operations remain. |
-| Character readiness | Requiring every catalog voice before full intake can delay first useful setup. Allowing only individually configured characters is a possible simplification, but changes agreed behavior and remains unadopted. |
-| Twitch account setup | Terminal/device-code and reward helpers remain an accepted workflow. Browser guidance may reduce recipient support effort; it requires a separate product decision and real recipient validation. |
-| Dialogue retention/review | Durable private logging serves agreed scope. Retention and review tooling remain undecided; avoid silently deleting history or adding a database/replay workflow. |
-| Preview/live capacity | Manual provider actions can overlap live work. No measured contention justifies a new intake/refund policy. |
-| Storage latency | Synchronous durable logging may stall on slow disks. Measure before trading durability for buffering. |
+| Topic                       | Assessment                                                                                                                                                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Character catalog authoring | Add/remove/rename in Characters is the clearest missing product capability. The user chose to record it for follow-up; current prompt/voice editing and trusted-file catalog operations remain.                  |
+| Character readiness         | Requiring every catalog voice before full intake can delay first useful setup. Allowing only individually configured characters is a possible simplification, but changes agreed behavior and remains unadopted. |
+| Twitch account setup        | Terminal/device-code and reward helpers remain an accepted workflow. Browser guidance may reduce recipient support effort; it requires a separate product decision and real recipient validation.                |
+| Dialogue retention/review   | Durable private logging serves agreed scope. Retention and review tooling remain undecided; avoid silently deleting history or adding a database/replay workflow.                                                |
+| Preview/live capacity       | Manual provider actions can overlap live work. No measured contention justifies a new intake/refund policy.                                                                                                      |
+| Storage latency             | Synchronous durable logging may stall on slow disks. Measure before trading durability for buffering.                                                                                                            |
 
 ## Release assessment
 

@@ -193,15 +193,12 @@ test('malformed Twitch configuration leaves Settings and independent previews av
   const dir = await mkdtemp(join(tmpdir(), 'momoitts-invalid-integration-'));
   const twitchText =
     'TWITCH_CLIENT_ID=PRIVATE_INVALID_CLIENT!\nTWITCH_CHANNEL=PRIVATE_INVALID_CHANNEL!\n';
-  const controlsText =
-    'STREAMELEMENTS_CHANNEL_ID=PRIVATE_INVALID_CHANNEL!\nSTREAMELEMENTS_OVERLAY_TOKEN=PRIVATE_TOKEN_VALUE\n';
   let runtime: AppRuntime | undefined;
   let server: ReturnType<typeof createHttpServer> | undefined;
   const originalFetch = globalThis.fetch;
   let transportCalls = 0;
   try {
     await writeFile(join(dir, 'twitch.env'), twitchText);
-    await writeFile(join(dir, 'streamelements.env'), controlsText);
     await writeFile(
       join(dir, 'app.json'),
       JSON.stringify({ volume: 100, setupSeen: false, twitchConnected: true }),
@@ -218,8 +215,6 @@ test('malformed Twitch configuration leaves Settings and independent previews av
     assert(state.management);
     assert.equal(state.queue?.repliesEnabled, false);
     assert.equal(state.twitch.status, 'error');
-    assert.equal('streamElements' in state, false);
-    assert.equal(store.env().STREAMELEMENTS_OVERLAY_TOKEN, undefined);
     {
       assert.equal(state.twitch.message, 'Repair private Twitch configuration and restart.');
       assert.throws(
@@ -274,15 +269,6 @@ test('malformed Twitch configuration leaves Settings and independent previews av
     );
     assert.equal(transportCalls, 0);
     assert.equal(await readFile(join(dir, 'twitch.env'), 'utf8'), twitchText);
-    assert.equal(await readFile(join(dir, 'streamelements.env'), 'utf8'), controlsText);
-    assert.equal(
-      new SettingsStore({
-        privateRoot: dir,
-        env: { STREAMELEMENTS_OVERLAY_TOKEN: 'ignored-inherited' },
-      }).proof('a'.repeat(64)),
-      new SettingsStore({ privateRoot: dir, env: {} }).proof('a'.repeat(64)),
-      'Retired overlay settings must not affect startup or launcher reuse.',
-    );
   } finally {
     globalThis.fetch = originalFetch;
     runtime?.close();
