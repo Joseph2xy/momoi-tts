@@ -8,7 +8,8 @@ $relativeFiles = @(
     'START HERE.txt', 'Setup Tyrone.cmd', 'Launch Tyrone.cmd', 'Try Tyrone Demo.cmd',
     'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.browser.json',
     'vite.config.ts', 'components.json', 'characters/catalog.json', 'README.md', 'AGENTS.md',
-    'PROJECT_HANDOFF.md', 'docs/product-ux.md', 'docs/architecture.md', 'docs/verification.md'
+    'PROJECT_HANDOFF.md', 'docs/product-ux.md', 'docs/architecture.md', 'docs/verification.md',
+    'docs/images/demo-activity.png', 'docs/images/demo-message.png'
 )
 foreach ($directory in @('src', 'web', 'scripts', 'characters/prompts', 'config/examples')) {
     $tree = Join-Path $projectRoot $directory

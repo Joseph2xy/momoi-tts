@@ -1,6 +1,12 @@
 # Verification
 
-Evidence recorded through 2026-10-09. Recorded results do not mean every check ran during the latest documentation edit. [README](../README.md) owns commands; [handoff](../PROJECT_HANDOFF.md) owns authorization, temporary settings, and cleanup blockers.
+Evidence recorded through 2026-10-31. Recorded results do not mean every check ran during the latest documentation edit. [README](../README.md) owns commands; [handoff](../PROJECT_HANDOFF.md) owns authorization, temporary settings, and cleanup blockers.
+
+## Presentation review — 2026-10-31
+
+A fresh clone on Node 24.20.0 passed `npm ci`, `npm run build`, and all twelve `npm run test:offline` files. The installed Codex probe and live providers were not run for this review.
+
+An isolated demo on loopback port 3237, with no provider configuration, opened the initial checklist and Activity. One synthetic question was submitted through the local HTTP route while paused, appeared under Up next, and reached Answered after clicking Resume in the browser. Selecting the history row opened its question and simulated reply. The two README screenshots capture those actual demo states at 1280×800; they were visually inspected and contain no private account data. This verifies this limited desktop path, not voice quality, real generation, Twitch, OBS, or mobile behavior. No application behavior changed in this presentation pass.
 
 ## Offline coverage
 

@@ -1,6 +1,24 @@
 # Stream characters
 
-A local Windows companion that turns a named character's question into dialogue and assigned-voice playback. Browser management is integrated; Twitch connection and OBS setup are deferred. Tyrone is the first file-based character. App naming and final model/voice refinement remain deferred.
+A local Windows streaming companion for character replies: submit `Name: question`, generate a short reply in that character's personality, and play it through an assigned voice. The operator can inspect replies, pause, skip, remove waiting questions, and manage providers from a browser.
+
+**Status:** working local prototype with an offline demo. Twitch intake has SDK/mock coverage but is not connected to the current application entrypoint; OBS setup is deferred. Tyrone is the first file-based character. App naming and final model/voice refinement remain open.
+
+![Activity screen with a synthetic question waiting for playback](docs/images/demo-activity.png)
+
+*Offline demo capture: synthetic viewer/question, no provider calls or Twitch connection.*
+
+## What is worth exploring
+
+- **A queue that spans the whole interaction.** One active request retains its slot through generation, speech synthesis, and acknowledged browser playback; two more can wait. Cooldowns, deduplication, expiry, and deadlines bound the work.
+- **Cancellation across asynchronous boundaries.** Skip/stop invalidates late generation or speech results, so a cancelled response cannot begin playing afterward.
+- **One audio owner.** A browser lease keeps secondary tabs silent. Closing or refreshing the owner cancels active work and pauses the queue until an explicit Resume.
+- **Separate generation and speech adapters.** Trusted character instructions and viewer text stay separate. Provider settings are captured per active request; saving changes does not mutate a request already in progress.
+- **Private local configuration.** Settings are validated and saved locally; browser state contains configured status rather than saved keys, voice IDs, or character prompts.
+
+The stack is **Node.js + TypeScript**, **React + Vite**, **Tailwind + shadcn/Radix**, and **TanStack Query core**. Generation adapters support OpenRouter and a guarded Codex CLI; speech uses Fish. Retained Twitch modules use Twurple. [Architecture](docs/architecture.md) explains the boundaries and source locations; [verification](docs/verification.md) distinguishes offline coverage from connected evidence.
+
+[Try the demo](#run-locally) · [Configuration](#browser-management-and-private-configuration) · [Development](#development)
 
 The [product and UX brief](docs/product-ux.md) defines the occasional-use control screen and accepted starter design. The behavior described below is the current implementation.
 
@@ -14,6 +32,12 @@ npm run demo
 ```
 
 Demo uses synthetic dialogue and a two-second tone, with no provider or Twitch calls. Open [controls](http://127.0.0.1:3210/), enable audio if prompted, and click **Resume**. Open [testing](http://127.0.0.1:3210/testing) separately and submit `Tyrone: How do I improve at ranked?`. The testing page owns no audio. One main tab owns playback; closing/refreshing it cancels active work and pauses. Reopen and Resume. Shutdown is in **Settings → Application**, or Ctrl+C for foreground use.
+
+On a fresh install, choose **Go to Activity** from the setup checklist; no keys or voice assignments are needed for demo mode. Keep Activity open while using the testing page. After the tone finishes, the question moves to History. Select its row to inspect the question and simulated reply:
+
+![Read-only message inspection after synthetic demo playback](docs/images/demo-message.png)
+
+To explore queue controls, pause Activity and submit questions from two distinct viewer names in Testing (respect the displayed cooldown). Remove one waiting question, then Resume to process the other. This demonstrates queue behavior, not voice quality or model performance. Shut down demo before starting normal mode.
 
 On Windows, **Try Tyrone Demo.cmd** starts/reuses demo; **Launch Tyrone.cmd** starts/reuses normal mode. **Setup Tyrone.cmd** runs prerequisite bootstrap and opens normal mode. Missing Node/dependencies produce explicit assisted-install prompts. Repeated launches reuse matching servers; a mismatch requires explicit shutdown/relaunch. Switch modes only after shutdown. Private launcher logs remain in `.local/launcher*.log`.
 
