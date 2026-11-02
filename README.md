@@ -4,6 +4,8 @@ MomoiTTS is a local Windows app that turns a viewer's named-character Channel Po
 
 ## First-time setup
 
+For a visual reference, these captures show the earlier synthetic-demo interface: [Activity](docs/images/demo-activity.png) and [message inspection](docs/images/demo-message.png). They demonstrate an earlier prototype, not the current guided setup or connected Twitch/provider behavior. The former `npm run demo` command and Tyrone demo launchers are not available in this version.
+
 1. Extract the entire ZIP into a writable folder and double-click **Launch MomoiTTS.cmd**. Its runtime is included.
 2. Follow **Finish setup** in the local page. **Connect Twitch** opens approval in another tab with the code filled in. Check your broadcaster account, click **Activate**, approve MomoiTTS, then return to the confirmed channel. No reward is created yet.
 3. **Connect AI and voice** guides you through OpenRouter, Fish Audio and a voice for the included Tyrone character. Save the services, save the voice to enable Tyrone, then generate a private test reply, play it and confirm you heard it. Edit personality or other characters later in Characters. Tests use your provider allowance and may incur charges; saving makes no provider request. [Provider configuration](#provider-configuration) explains model IDs, keys and access.

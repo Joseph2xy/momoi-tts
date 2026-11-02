@@ -1,12 +1,12 @@
 # Project handoff
 
-Updated: 2026-10-19.
+Updated: 2026-11-02.
 
 ## Current status
 
 The approved guided setup and offline cleanup are implemented. Character list/editor presentation is simplified, with compact status rows and voice/availability above bounded instructions. Setup uses shared provider/voice fields, with Tyrone as the starter and prompt editing outside setup, private reply/audio checks with viewer intake off, explicit paused reward creation and deliberate entry to Activity. The current review fixed stale test confirmation, reward-edit resets, cross-client cancellation and viewer cooldown interference. [README](README.md) owns usage, [architecture](docs/architecture.md) owns boundaries, [verification](docs/verification.md) owns source/package evidence, and [audit](docs/audit.md) owns remaining gaps.
 
-The current empty recipient preview runs at http://127.0.0.1:62636/ in .generated/recipient-preview-guided/MomoiTTS. Superseded preview binaries are removed; their private/recovery state remains in place. Credentials, private settings, account caches and transfer/recovery state are preserved. No provider usage, account actions or live Twitch/OBS changes occurred. The working tree includes prior milestone changes; no commit/publication was requested.
+The current empty recipient preview runs at http://127.0.0.1:62636/ in .generated/recipient-preview-guided/MomoiTTS. Superseded preview binaries are removed; their private/recovery state remains in place. Credentials, private settings, account caches and transfer/recovery state are preserved. No provider usage, account actions or live Twitch/OBS changes occurred. The user authorized committing and synchronizing the pending source work with the private GitHub repository; no public release or visibility change is authorized.
 
 ## Scope and provisional choices
 
