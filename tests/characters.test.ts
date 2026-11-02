@@ -37,25 +37,14 @@ try {
   const catalogUrl = pathToFileURL(join(root, 'characters.json'));
   const save = async (value: unknown) => writeFile(catalogUrl, JSON.stringify(value));
   await save(catalog);
-  const profiles = readCharacters(env, false, catalogUrl);
-  assert.equal(profiles[0]!.voiceId, voiceA);
-  assert.equal(profiles[1]!.voiceId, voiceB);
-  assert.equal(readCharacters(env, true, catalogUrl)[0]!.voiceId, undefined);
-  assert(Object.isFrozen(profiles));
-  assert(Object.isFrozen(profiles[0]));
-  for (const invalidEnv of [
-    { ...env, FISH_BETA_VOICE_ID: '' },
-    { ...env, FISH_BETA_VOICE_ID: 'secret-invalid-voice' },
-    { ...env, FISH_API_KEY: '' },
-  ]) {
-    assert.throws(
-      () => readCharacters(invalidEnv, false, catalogUrl),
-      (error) =>
-        error instanceof Error &&
-        !error.message.includes(env.FISH_API_KEY) &&
-        !error.message.includes('secret-invalid-voice'),
-    );
-  }
+  const catalogProfiles = readCharacters(catalogUrl);
+  assert.equal(catalogProfiles[0]!.voiceId, undefined);
+  assert(Object.isFrozen(catalogProfiles));
+  assert(Object.isFrozen(catalogProfiles[0]));
+  const profiles = catalogProfiles.map((profile, index) => ({
+    ...profile,
+    voiceId: index === 0 ? voiceA : voiceB,
+  }));
   for (const invalid of [
     [],
     [catalog[0], { ...catalog[1], name: 'alpha' }],
@@ -67,7 +56,7 @@ try {
     [{ ...catalog[0], prompt: 'unknown field' }],
   ]) {
     await save(invalid);
-    assert.throws(() => readCharacters(env, false, catalogUrl), /Invalid character catalog/u);
+    assert.throws(() => readCharacters(catalogUrl), /Invalid character catalog/u);
   }
   await save(catalog);
   assert.deepEqual(selectCharacter('  aLpHa : why: now?  ', profiles), {

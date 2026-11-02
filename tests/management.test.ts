@@ -26,6 +26,14 @@ try {
     maxTokens: 1024,
   });
   store.save('speech', { key: 'dummy-private-speech' });
+  const initialTestRevision = store.snapshot().testRevision;
+  assert.match(initialTestRevision!, /^[a-f0-9-]{36}$/u);
+  store.save('speech', { key: 'dummy-private-speech' });
+  assert.notEqual(
+    store.snapshot().testRevision,
+    initialTestRevision,
+    'Even replacement with an identical key invalidates previous browser test evidence.',
+  );
   assert.equal(store.snapshot().speech.model, 's2.1-pro-free');
   store.save('speech', { key: '', model: 's2.1-pro' });
   store.save('speech', { key: '' });
@@ -39,19 +47,32 @@ try {
     's2.1-pro',
   );
   const speechBeforeInvalid = await readFile(join(dir, 'fish.env'), 'utf8');
+  const testsBeforeInvalid = store.snapshot().testRevision;
   assert.throws(() => store.save('speech', { key: '', model: 'misspelled-model' }));
+  assert.equal(store.snapshot().testRevision, testsBeforeInvalid);
   assert.equal(await readFile(join(dir, 'fish.env'), 'utf8'), speechBeforeInvalid);
   store.saveCharacter('tyrone', {
     prompt: store.characterEditor('tyrone').prompt,
     voiceId: '0123456789abcdef0123456789abcdef',
   });
+  assert.notEqual(store.snapshot().testRevision, testsBeforeInvalid);
+  const testsBeforeReload = store.snapshot().testRevision;
+  store.refreshProfiles();
+  assert.notEqual(store.snapshot().testRevision, testsBeforeReload);
   assert.equal(store.snapshot().localReady, true);
   assert.equal(
     store.snapshot().setupSeen,
     false,
     'Saving provider setup does not silently finish onboarding.',
   );
+  const testsBeforeAppSave = store.snapshot().testRevision;
   store.save('application', { setupSeen: true });
+  assert.equal(store.snapshot().testRevision, testsBeforeAppSave);
+  assert.notEqual(
+    new SettingsStore({ privateRoot: dir, env: {} }).snapshot().testRevision,
+    testsBeforeAppSave,
+    'Restarted settings require fresh browser test evidence.',
+  );
   assert.equal(new SettingsStore({ privateRoot: dir, env: {} }).snapshot().setupSeen, true);
   assert.equal(
     new SettingsStore({ privateRoot: dir, env: {} }).proof('a'.repeat(64)),
@@ -76,12 +97,18 @@ try {
     }),
   );
   assert.equal(await readFile(join(dir, 'generation.env'), 'utf8'), previous);
+  const testsBeforeGeneration = store.snapshot().testRevision;
   store.save('generation', {
     provider: 'openrouter',
     model: 'test/new:free',
     key: '',
     maxTokens: 2048,
   });
+  assert.notEqual(store.snapshot().testRevision, testsBeforeGeneration);
+  assert(
+    !(await readFile(join(dir, 'generation.env'), 'utf8')).includes(store.snapshot().testRevision!),
+    'The opaque browser test revision is never persisted with private settings.',
+  );
   assert.equal(
     new SettingsStore({ privateRoot: dir, env: {} }).snapshot().generation.model,
     'test/new:free',
@@ -101,7 +128,9 @@ try {
   });
   assert.equal(override.snapshot().generation.model, 'test/override:free');
   assert(override.snapshot().overrides.includes('OPENROUTER_MODEL'));
+  const testsBeforePlayback = store.snapshot().testRevision;
   store.save('playback', { volume: 37 });
+  assert.equal(store.snapshot().testRevision, testsBeforePlayback);
   assert.equal(new SettingsStore({ privateRoot: dir, env: {} }).volume, 0.37);
   assert.equal(
     new SettingsStore({ privateRoot: dir, env: { MOMOI_TTS_PLAYBACK_PORT: '3219' } }).port,
@@ -152,8 +181,10 @@ try {
     );
     await writeFile(join(keyDir, 'fish.env'), 'FISH_API_KEY=dummy-speech\nFISH_MODEL=s2.1-pro\n');
     const keys = new SettingsStore({ privateRoot: keyDir, env: {} });
+    const beforeRemoval = keys.snapshot().testRevision;
     assert.throws(() => keys.save('generation', { removeKey: true, key: 'replacement' }));
     keys.save('generation', { removeKey: true });
+    assert.notEqual(keys.snapshot().testRevision, beforeRemoval);
     assert.equal(keys.snapshot().generation.model, 'test/model');
     assert.equal(keys.snapshot().generation.keyConfigured, false);
     assert.equal(keys.snapshot().generation.ready, false);
@@ -161,7 +192,9 @@ try {
     assert(
       !(await readFile(join(keyDir, 'generation.env'), 'utf8')).includes('OPENROUTER_API_KEY'),
     );
+    const beforeSpeechRemoval = keys.snapshot().testRevision;
     keys.save('speech', { removeKey: true });
+    assert.notEqual(keys.snapshot().testRevision, beforeSpeechRemoval);
     assert.equal(keys.snapshot().speech.model, 's2.1-pro');
     assert.equal(
       new SettingsStore({ privateRoot: keyDir, env: {} }).snapshot().speech.keyConfigured,

@@ -14,6 +14,8 @@ export interface PlaybackState {
   volume: number;
   message: string;
   canQuit?: boolean;
+  twitchSetup?: TwitchSetupState;
+  repliesRequested?: boolean;
   queue?: QueueState;
   twitch?: TwitchState;
   logging?: { available: boolean; failed: boolean };
@@ -22,6 +24,7 @@ export interface PlaybackState {
 export type SettingsSection = 'generation' | 'speech' | 'playback' | 'application';
 export interface ManagementState {
   revision: number;
+  testRevision: string;
   pending: boolean;
   setupSeen: boolean;
   generation: {
@@ -32,7 +35,7 @@ export interface ManagementState {
     ready: boolean;
   };
   speech: { provider: 'fish'; model: string; keyConfigured: boolean; ready: boolean };
-  characters: { id: string; name: string; voiceConfigured: boolean }[];
+  characters: { id: string; name: string; voiceConfigured: boolean; available?: boolean }[];
   volume: number;
   localReady: boolean;
   errors: Partial<Record<SettingsSection | 'characters', string>>;
@@ -74,6 +77,21 @@ export interface CharacterEditorState extends CharacterInfo {
   prompt: string;
   voiceId: string;
   voiceOverridden: boolean;
+  available?: boolean;
+}
+
+export interface TwitchSetupState {
+  registrationReady: boolean;
+  authorized: boolean;
+  channel: string | null;
+  rewardId: string | null;
+  rewardTitle: string;
+  rewardCost: number;
+  rewardCooldown: number;
+  busy: boolean;
+  activationUrl?: string;
+  userCode?: string;
+  message: string;
 }
 export interface RequestEntry {
   id: string;

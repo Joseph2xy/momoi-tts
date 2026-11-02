@@ -17,8 +17,9 @@ import { readCharacterEdits, validCharacterEdit, type CharacterEdit } from '../c
 import type { CharacterEditorState } from '../shared/protocol.ts';
 import { RequestInputError } from '../shared/errors.ts';
 import type { ManagementState, SettingsSection } from '../shared/protocol.ts';
-import { readTwitchConfig } from '../twitch/config.ts';
+import { readTwitchConfig, validRewardSettings, type TwitchConfig } from '../twitch/config.ts';
 import { defaultFishModel, validateFishModel } from '../providers/fish/config.ts';
+import { characterRewardPrompt } from '../twitch/reward.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const files = ['generation.env', 'fish.env'] as const;
@@ -42,6 +43,8 @@ export class SettingsStore {
   #app: AppSettings = { volume: 100, setupSeen: false, twitchConnected: false };
   #readError = false;
   #revision = 0;
+  // Opaque, process-local invalidation token; never derived from or stored with credentials.
+  #testRevision = randomUUID();
   #catalog: URL;
   #characterEdits: Record<string, CharacterEdit> = {};
   constructor(options: { privateRoot?: string; env?: NodeJS.ProcessEnv; catalog?: URL } = {}) {
@@ -99,6 +102,63 @@ export class SettingsStore {
   twitchConfig() {
     return readTwitchConfig(this.env());
   }
+  twitchClientId(): string {
+    let shipped = '';
+    try {
+      shipped = JSON.parse(readFileSync(resolve(root, 'config/twitch-app.json'), 'utf8')).clientId;
+    } catch {}
+    const value = this.env().TWITCH_CLIENT_ID || shipped;
+    return typeof value === 'string' && /^[a-z0-9]{10,64}$/iu.test(value) ? value : '';
+  }
+  #twitchUpdates(config: TwitchConfig): Record<string, string> {
+    if (this.#readError)
+      throw new RequestInputError('Repair unreadable private settings before saving.');
+    if (!validRewardSettings(config))
+      throw new RequestInputError(
+        'Use a reward name up to 45 characters, a price of 1–1000000 and cooldown of 0 or 60–604800 seconds.',
+      );
+    const updates: Record<string, string> = {
+      TWITCH_CLIENT_ID: config.clientId,
+      TWITCH_CHANNEL: config.channel,
+      TWITCH_REWARD_TITLE: config.rewardTitle,
+      TWITCH_REWARD_COST: String(config.rewardCost),
+      TWITCH_REWARD_COOLDOWN: String(config.rewardCooldown ?? 60),
+      TWITCH_REWARD_ID: config.rewardId ?? '',
+    };
+    readTwitchConfig(updates);
+    if (
+      Object.keys(updates).some(
+        (key) => this.overrides[key] !== undefined && this.overrides[key] !== updates[key],
+      )
+    )
+      throw new RequestInputError(
+        'Remove Twitch launch overrides before changing account or reward settings.',
+      );
+    return updates;
+  }
+  validateTwitchSave(config: TwitchConfig): void {
+    this.#twitchUpdates(config);
+  }
+  saveTwitch(config: TwitchConfig): void {
+    const updates = this.#twitchUpdates(config);
+    const path = resolve(this.privateRoot, 'twitch.env');
+    const original = existsSync(path) ? readFileSync(path, 'utf8') : '';
+    const kept = original.split(/\r?\n/u).filter((line) => {
+      const key = /^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=/u.exec(line)?.[1];
+      return !key || !(key in updates);
+    });
+    this.#write(
+      'twitch.env',
+      kept.join('\n').trimEnd() +
+        '\n' +
+        Object.entries(updates)
+          .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+          .join('\n') +
+        '\n',
+    );
+    Object.assign(this.#values, updates);
+    this.#revision++;
+  }
   get twitchConnected() {
     return this.#app.twitchConnected === true;
   }
@@ -126,13 +186,22 @@ export class SettingsStore {
     };
   }
   profiles(withVoices = false) {
-    const base = readCharacters({}, true, this.#catalog);
+    const base = readCharacters(this.#catalog);
     const entries = this.#catalogEntries();
-    const env = this.env();
-    const voiceEnv = { ...env };
-    for (const entry of entries)
-      voiceEnv[entry.voiceIdEnv] = this.#voice(entry.id, entry.voiceIdEnv);
-    const profiles = withVoices ? readCharacters(voiceEnv, false, this.#catalog) : base;
+    const profiles = base
+      .filter(
+        (profile) =>
+          !withVoices ||
+          this.#available(profile.id, entries.find((entry) => entry.id === profile.id)!.voiceIdEnv),
+      )
+      .map((profile) => {
+        if (!withVoices) return profile;
+        const entry = entries.find((entry) => entry.id === profile.id)!;
+        const voiceId = this.#voice(profile.id, entry.voiceIdEnv);
+        if (!/^[a-f0-9]{32}$/iu.test(voiceId))
+          throw new Error('Available character needs a valid voice.');
+        return { ...profile, voiceId };
+      });
     return Object.freeze(
       profiles.map((profile) =>
         Object.freeze({
@@ -145,14 +214,20 @@ export class SettingsStore {
   refreshProfiles() {
     this.profiles();
     this.#revision++;
+    this.#testRevision = randomUUID();
   }
   #catalogEntries(): { id: string; name: string; voiceIdEnv: string }[] {
-    readCharacters({}, true, this.#catalog);
+    readCharacters(this.#catalog);
     return JSON.parse(readFileSync(this.#catalog, 'utf8'));
   }
   #voice(id: string, envName: string): string {
     return (
       this.overrides[envName] ?? this.#characterEdits[id]?.voiceId ?? this.#values[envName] ?? ''
+    );
+  }
+  #available(id: string, voiceIdEnv: string): boolean {
+    return (
+      this.#characterEdits[id]?.available ?? /^[a-f0-9]{32}$/iu.test(this.#voice(id, voiceIdEnv))
     );
   }
   characterEditor(id: string): CharacterEditorState {
@@ -165,16 +240,31 @@ export class SettingsStore {
       prompt: profile.prompt,
       voiceId: this.#voice(id, entry.voiceIdEnv),
       voiceOverridden: this.overrides[entry.voiceIdEnv] !== undefined,
+      available: this.#available(id, entry.voiceIdEnv),
     };
   }
   saveCharacter(id: string, body: Record<string, unknown>): void {
     if (this.#readError)
       throw new RequestInputError('Repair unreadable private settings before saving.');
+    const current = this.characterEditor(id);
+    // Voice-only setup retains the latest saved instructions, including edits from another tab.
+    if (body.prompt === undefined) body = { ...body, prompt: current.prompt };
     if (!validCharacterEdit(body))
       throw new RequestInputError(
         'Enter a nonempty prompt up to 6000 UTF-8 bytes and a valid voice ID or leave the voice blank.',
       );
-    const current = this.characterEditor(id);
+    if (this.env().TWITCH_REWARD_ID)
+      characterRewardPrompt(
+        this.#catalogEntries()
+          .filter((character) =>
+            character.id === id
+              ? (body.available ?? /^[a-f0-9]{32}$/iu.test(body.voiceId))
+              : this.#available(character.id, character.voiceIdEnv),
+          )
+          .map((character) => character.name),
+      );
+    if (body.available === true && !/^[a-f0-9]{32}$/iu.test(body.voiceId))
+      throw new RequestInputError('Assign a valid voice before making this character available.');
     const entry = this.#catalogEntries().find((character) => character.id === id)!;
     if (current.voiceOverridden && body.voiceId !== current.voiceId)
       throw new RequestInputError(
@@ -184,6 +274,7 @@ export class SettingsStore {
       ...this.#characterEdits,
       [id]: {
         prompt: body.prompt,
+        available: body.available ?? /^[a-f0-9]{32}$/iu.test(body.voiceId),
         voiceId: current.voiceOverridden
           ? (this.#characterEdits[id]?.voiceId ?? this.#values[entry.voiceIdEnv] ?? '')
           : body.voiceId,
@@ -192,6 +283,7 @@ export class SettingsStore {
     this.#write('characters.json', JSON.stringify(edits, null, 2) + '\n');
     this.#characterEdits = edits;
     this.#revision++;
+    this.#testRevision = randomUUID();
   }
   snapshot(): ManagementState {
     const env = this.env();
@@ -220,10 +312,13 @@ export class SettingsStore {
         id,
         name,
         voiceConfigured: /^[a-f0-9]{32}$/iu.test(this.#voice(id, voiceIdEnv)),
+        available: this.#available(id, voiceIdEnv),
       }));
-      charactersReady = characters.length > 0 && characters.every((p) => p.voiceConfigured);
+      const available = characters.filter((p) => p.available);
+      charactersReady = available.length > 0 && available.every((p) => p.voiceConfigured);
       if (!charactersReady)
-        errors.characters = 'Assign a valid voice to every file-based character.';
+        errors.characters =
+          'Configure a voice and make at least one character available to viewers.';
     } catch {
       errors.characters = 'Check the character catalog and prompt files.';
     }
@@ -232,6 +327,7 @@ export class SettingsStore {
         'Private settings could not be read. Repair the local configuration before saving.';
     return {
       revision: this.#revision,
+      testRevision: this.#testRevision,
       pending: false,
       setupSeen: this.#app.setupSeen,
       generation: {
@@ -326,6 +422,7 @@ export class SettingsStore {
       this.#write(file, kept.join('\n').trimEnd() + '\n');
       delete this.#values[name];
       this.#revision++;
+      this.#testRevision = randomUUID();
       return;
     }
     const values = { ...this.#values };
@@ -395,7 +492,7 @@ export class SettingsStore {
           typeof body.setupSeen !== 'boolean' ||
           Object.keys(body).some((key) => key !== 'setupSeen')
         )
-          fail('Application settings accept only setup checklist progress.');
+          fail('Application settings accept only setup completion status.');
         app.setupSeen = body.setupSeen as boolean;
       }
       this.#write('app.json', JSON.stringify(app, null, 2) + '\n');
@@ -422,5 +519,6 @@ export class SettingsStore {
     );
     this.#values = values;
     this.#revision++;
+    this.#testRevision = randomUUID();
   }
 }

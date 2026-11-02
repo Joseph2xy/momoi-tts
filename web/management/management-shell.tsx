@@ -42,7 +42,8 @@ type Page = 'activity' | 'characters' | 'settings' | 'setup';
 type Props = {
   page: Page;
   onNavigate: (page: Page) => void;
-  onDialog: (dialog: 'diagnostics' | 'restart' | 'quit') => void;
+  onDialog: (dialog: 'diagnostics' | 'restart') => void;
+  onExit: () => void;
   needsSetup: boolean;
   playerMessage: string;
   audioConnected: boolean;
@@ -64,12 +65,11 @@ function Navigation(props: Props) {
     setOpenMobile(false);
   }
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar>
       <SidebarHeader className="h-22 shrink-0 flex-row items-center px-4 py-0">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              size="lg"
               tooltip="MomoiTTS home"
               aria-label="MomoiTTS home"
               onClick={() => navigate('activity')}
@@ -102,7 +102,6 @@ function Navigation(props: Props) {
             {pages.map((item) => (
               <SidebarMenuItem key={item.id} className="flex h-12 items-center">
                 <SidebarMenuButton
-                  size="lg"
                   isActive={props.page === item.id}
                   tooltip={item.label}
                   aria-label={item.label}
@@ -117,7 +116,6 @@ function Navigation(props: Props) {
             {props.needsSetup ? (
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  size="lg"
                   isActive={props.page === 'setup'}
                   tooltip="Finish setup"
                   aria-label="Finish setup"
@@ -136,7 +134,7 @@ function Navigation(props: Props) {
           <SidebarMenuItem className="flex h-12 items-center">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarMenuButton size="lg" tooltip="App options" aria-label="App options">
+                <SidebarMenuButton tooltip="App options" aria-label="App options">
                   <MoreHorizontal />
                   {!collapsed ? <span>App options</span> : null}
                 </SidebarMenuButton>
@@ -165,16 +163,20 @@ function Navigation(props: Props) {
                     <RotateCcw />
                     Restart app
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={props.blocked || !props.canQuit}
-                    onSelect={() => props.onDialog('quit')}
-                  >
-                    <Power />
-                    Shut down app
-                  </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip="Exit MomoiTTS"
+              aria-label="Exit MomoiTTS"
+              disabled={props.blocked || !props.canQuit}
+              onClick={props.onExit}
+            >
+              <Power />
+              {!collapsed ? <span>Exit MomoiTTS</span> : null}
+            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
@@ -213,10 +215,13 @@ export function ManagementShell(props: Props) {
                 tabIndex={0}
               >
                 <Radio aria-hidden="true" />
-                {props.audioConnected ? 'Audio connected' : 'Audio disconnected'}
+                {props.audioConnected ? 'Audio source connected' : 'Audio source disconnected'}
               </Badge>
             </TooltipTrigger>
-            <TooltipContent>{props.playerMessage}</TooltipContent>
+            <TooltipContent>
+              {props.playerMessage} Confirm audibility and recording/stream tracks in OBS
+              separately.
+            </TooltipContent>
           </Tooltip>
         </header>
         {props.children}

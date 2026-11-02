@@ -1,7 +1,8 @@
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { AccessToken } from '@twurple/auth';
 import { redemptionScope } from './config.ts';
+import { replacePrivateFile } from './persistence.ts';
 
 export const tokenFile = new URL('../../.local/twitch-token.json', import.meta.url);
 export interface SavedToken {
@@ -49,13 +50,17 @@ export async function loadToken(file = tokenFile): Promise<SavedToken> {
   if (Buffer.byteLength(text) > 16_384) throw new Error('Invalid saved Twitch sign-in.');
   return parseSavedToken(JSON.parse(text));
 }
-export async function saveToken(value: SavedToken, file = tokenFile): Promise<void> {
+export async function saveToken(
+  value: SavedToken,
+  file = tokenFile,
+  signal?: AbortSignal,
+): Promise<void> {
   const validated = parseSavedToken(value);
   await mkdir(new URL('./', file), { recursive: true });
   const temporary = new URL(`${file.href}.${randomUUID()}.tmp`);
   try {
-    await writeFile(temporary, JSON.stringify(validated), { mode: 0o600 });
-    await rename(temporary, file);
+    await writeFile(temporary, JSON.stringify(validated), { mode: 0o600, flush: true });
+    await replacePrivateFile(temporary, file, signal);
   } finally {
     await rm(temporary, { force: true });
   }

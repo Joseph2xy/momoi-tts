@@ -1,14 +1,17 @@
 export interface CharacterEdit {
   prompt: string;
   voiceId: string;
+  available?: boolean;
 }
 
 export function validCharacterEdit(value: unknown): value is CharacterEdit {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const edit = value as Record<string, unknown>;
   return (
-    Object.keys(edit).length === 2 &&
-    Object.keys(edit).every((key) => key === 'prompt' || key === 'voiceId') &&
+    Object.keys(edit).length >= 2 &&
+    Object.keys(edit).length <= 3 &&
+    Object.keys(edit).every((key) => ['prompt', 'voiceId', 'available'].includes(key)) &&
+    (edit.available === undefined || typeof edit.available === 'boolean') &&
     typeof edit.prompt === 'string' &&
     !!edit.prompt.trim() &&
     Buffer.byteLength(edit.prompt, 'utf8') <= 6000 &&

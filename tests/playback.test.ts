@@ -293,7 +293,9 @@ try {
     await post('/api/player/poll', { session: b })
   ).json()) as PlayerState;
   assert(replacement.primary);
-  assert.equal((await state()).queue?.repliesEnabled, false);
+  assert.equal((await state()).queue?.repliesEnabled, true);
+  assert.equal((await state()).queue?.activeId, null);
+  assert.equal((await fetch(base + third.clip.url)).status, 404);
   assert.equal(replacement.status, 'stopped');
   await post('/api/player/release', { session: a });
   assert((await state()).playerConnected);

@@ -15,6 +15,7 @@ interface QueueDependencies {
   record?(record: QueueRecord): void;
 }
 interface Job {
+  setupTest: boolean;
   pipeline?: QueuePipeline;
   fixedPipeline?: QueuePipeline;
   entry: RequestEntry;
@@ -84,11 +85,24 @@ export class RequestQueue {
       this.#pump();
     } else if (this.#waiting.some((job) => job.entry.id === id)) this.remove(id);
   }
-  submit(
+  submit(viewer: unknown, question: unknown, eventId: unknown): string {
+    return this.#submit(viewer, question, eventId, undefined, false);
+  }
+  // Only trusted local setup actions may use the existing playback queue with intake off.
+  submitSetupTest(
+    viewer: string,
+    question: string,
+    eventId: string,
+    pipeline: QueuePipeline,
+  ): string {
+    return this.#submit(viewer, question, eventId, pipeline, true);
+  }
+  #submit(
     viewer: unknown,
     question: unknown,
     eventId: unknown,
-    fixedPipeline?: QueuePipeline,
+    fixedPipeline: QueuePipeline | undefined,
+    setupTest: boolean,
   ): string {
     const pipeline = fixedPipeline ?? this.#deps.pipeline;
     if (!pipeline) throw new RequestInputError('Question generation is unavailable in this mode.');
@@ -104,21 +118,27 @@ export class RequestQueue {
     this.tick();
     const previous = this.#events.get(eventId);
     if (previous) return previous.id;
-    if (!this.#repliesEnabled)
+    if (setupTest && this.#repliesEnabled)
+      throw new RequestInputError('Turn replies off before testing setup audio.');
+    if (setupTest && (this.#active || this.#waiting.length))
+      throw new RequestInputError('Finish or clear queued work before testing setup audio.');
+    if (!setupTest && !this.#repliesEnabled)
       throw new RequestInputError('Replies are off. This request will be refunded.');
     const { character, question: text } = selectCharacter(question, pipeline.characters);
     const name = viewer.trim();
     this.#checkCapacity(name);
     const now = this.#now();
-    const viewerLast = this.#viewers.get(name.toLowerCase()) ?? -Infinity;
-    const wait = Math.max(
-      this.#settings.viewerCooldownMs - (now - viewerLast),
-      this.#settings.globalCooldownMs - (now - this.#lastAccepted),
-    );
-    if (wait > 0)
-      throw new RequestInputError(
-        `Cooldown: wait ${Math.ceil(wait / 1000)} seconds before submitting another question.`,
+    if (!setupTest) {
+      const viewerLast = this.#viewers.get(name.toLowerCase()) ?? -Infinity;
+      const wait = Math.max(
+        this.#settings.viewerCooldownMs - (now - viewerLast),
+        this.#settings.globalCooldownMs - (now - this.#lastAccepted),
       );
+      if (wait > 0)
+        throw new RequestInputError(
+          `Cooldown: wait ${Math.ceil(wait / 1000)} seconds before submitting another question.`,
+        );
+    }
     const entry: RequestEntry = {
       id: randomUUID(),
       viewer: name,
@@ -130,9 +150,12 @@ export class RequestQueue {
     };
     this.#events.set(eventId, { id: entry.id, at: now });
     while (this.#events.size > 256) this.#events.delete(this.#events.keys().next().value!);
-    this.#viewers.set(name.toLowerCase(), now);
-    this.#lastAccepted = now;
+    if (!setupTest) {
+      this.#viewers.set(name.toLowerCase(), now);
+      this.#lastAccepted = now;
+    }
     this.#enqueue({
+      setupTest,
       entry,
       character: Object.freeze({ ...character }),
       controller: new AbortController(),
@@ -142,6 +165,11 @@ export class RequestQueue {
     return entry.id;
   }
   setRepliesEnabled(enabled: boolean): void {
+    // Starting viewer intake must not leave a setup test playing or queued.
+    if (enabled) {
+      if (this.#active?.setupTest) this.#cancelActive('skipped', 'Setup test stopped.');
+      for (const job of [...this.#waiting]) if (job.setupTest) this.remove(job.entry.id);
+    }
     this.#repliesEnabled = enabled;
     if (enabled) this.tick();
     else {
@@ -241,7 +269,7 @@ export class RequestQueue {
   }
   #pump(): void {
     if (
-      !this.#repliesEnabled ||
+      (!this.#repliesEnabled && !this.#waiting[0]?.setupTest) ||
       this.#active ||
       !this.#waiting.length ||
       !this.#deps.playerReady() ||
@@ -252,7 +280,13 @@ export class RequestQueue {
     job.pipeline = job.fixedPipeline ?? this.#deps.pipeline;
     // Keep the accepted character identity; apply its latest voice before work starts.
     const latest = job.pipeline!.characters.find((profile) => profile.id === job.character.id);
-    if (latest) job.character = Object.freeze({ ...job.character, voiceId: latest.voiceId });
+    if (!latest) {
+      job.controller.abort();
+      this.#finish(job, 'failed', 'Selected character is no longer available.');
+      this.#pump();
+      return;
+    }
+    job.character = Object.freeze({ ...job.character, voiceId: latest.voiceId });
     this.#active = job;
     job.entry.startedAt = this.#now();
     void this.#run(job);

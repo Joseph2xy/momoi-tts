@@ -26,6 +26,58 @@ const config = {
   rewardCost: 1000,
 };
 
+test('a delayed reward unpause is corrected immediately after stream end', async () => {
+  let handlers!: TwitchCallbacks;
+  let releaseUnpause!: () => void;
+  const pauses: boolean[] = [];
+  const queue = new RequestQueue({ playerReady: () => false, play() {}, stop() {} });
+  const intake = new TwitchIntake(
+    config,
+    queue,
+    (_config, callbacks) => {
+      handlers = callbacks;
+      return {
+        async start() {
+          callbacks.connected('reward1', true);
+        },
+        stop() {},
+        async status() {
+          return 'UNFULFILLED';
+        },
+        async settle(_reward, _id, target) {
+          return target;
+        },
+        async outstanding() {
+          return [];
+        },
+        async isLive() {
+          return true;
+        },
+        async pauseReward(_reward, paused) {
+          pauses.push(paused);
+          if (!paused)
+            await new Promise<void>((resolve) => {
+              releaseUnpause = resolve;
+            });
+        },
+      };
+    },
+    memoryRedemptionStore(),
+  );
+  try {
+    intake.connect();
+    await until(() => intake.snapshot().status === 'connected' && pauses.at(-1) === true);
+    intake.setAvailable(true);
+    await until(() => !!releaseUnpause);
+    handlers.streamChanged(false);
+    releaseUnpause();
+    await until(() => pauses.at(-1) === true);
+    assert.deepEqual(pauses.slice(-3), [true, false, true]);
+  } finally {
+    intake.disconnect();
+  }
+});
+
 test('failed atomic Twitch writes remove temporary credential and journal files', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'momoitts-write-cleanup-'));
   try {

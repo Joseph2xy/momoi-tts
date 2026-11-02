@@ -9,7 +9,11 @@ import {
   MessageSquare,
   WandSparkles,
 } from 'lucide-react';
-import type { ManagementState, PlaybackState } from '../../src/shared/protocol.ts';
+import type {
+  CharacterEditorState,
+  ManagementState,
+  PlaybackState,
+} from '../../src/shared/protocol.ts';
 import type { ServerView, createServerState } from '../shared/server-state.ts';
 import { GenerationTest, SpeechTest, ObsTest } from './provider-tests.tsx';
 import { Button } from './components/ui/button';
@@ -25,15 +29,10 @@ import {
   DialogDescription,
 } from './components/ui/dialog';
 import { ManagementShell } from './management-shell';
+import { SetupJourney } from './setup-journey';
+import { TwitchSettings, useRewardDraft } from './twitch-settings';
 import { defaultFishModel, fishModels } from '../../src/providers/fish/config.ts';
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardAction,
-} from './components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from './components/ui/card';
 import { Skeleton } from './components/ui/skeleton';
 import { Badge } from './components/ui/badge';
 import { FeedbackBanner, type FeedbackTone } from './feedback';
@@ -53,7 +52,7 @@ const Activity = lazy(() =>
 type Server = ReturnType<typeof createServerState>;
 type Page = 'activity' | 'characters' | 'settings' | 'setup';
 type Topic = 'overview' | 'generation' | 'speech' | 'obs' | 'twitch';
-type TestResult = { ok: boolean; message: string; at: number; revision: number };
+type TestResult = { ok: boolean; message: string; at: number; testRevision: string };
 const topicNames = {
   generation: 'Generation',
   speech: 'Speech',
@@ -61,10 +60,10 @@ const topicNames = {
   twitch: 'Twitch',
 };
 const topicDescriptions = {
-  generation: 'Configure OpenRouter to generate replies.',
-  speech: 'Configure Fish Audio and preview voices.',
+  generation: 'OpenRouter writes character replies.',
+  speech: 'Fish Audio reads replies aloud. Choose voices in Characters.',
   obs: 'Route spoken replies into your stream and check the output separately.',
-  twitch: 'Connect your Channel Points reward to viewer replies.',
+  twitch: 'Connect your broadcaster account, then create the viewer reward.',
 };
 type Generation = {
   model: string;
@@ -72,16 +71,9 @@ type Generation = {
   maxTokens: number;
 };
 type Speech = { key: string; model: string };
-type Character = {
-  id: string;
-  name: string;
-  prompt: string;
-  voiceId: string;
-  voiceOverridden: boolean;
-};
 type CharacterDraft = {
-  value: Character;
-  original: Character;
+  value: CharacterEditorState;
+  original: CharacterEditorState;
   dirty: boolean;
   epoch: number;
   feedback: string;
@@ -107,8 +99,8 @@ function useDraft<T>(value: (m?: ManagementState) => T, management: ManagementSt
   const dirtyRef = useRef(false);
   useEffect(() => {
     if (!dirtyRef.current) setDraft(value(management));
-    setCheck(null);
   }, [management?.revision]);
+  useEffect(() => setCheck(null), [management?.testRevision]);
   function edit(patch: Partial<T>) {
     epoch.current++;
     dirtyRef.current = true;
@@ -218,8 +210,8 @@ function SaveActions({
 export function App({ view, server }: { view: ServerView; server: Server }) {
   const state = view.state,
     m = state?.management;
-  const currentRevision = useRef(m?.revision);
-  currentRevision.current = m?.revision;
+  const currentTestRevision = useRef(m?.testRevision);
+  currentTestRevision.current = m?.testRevision;
   const requestedSettings = new URLSearchParams(location.search).get('page') === 'settings';
   const requestedTopic = new URLSearchParams(location.search).get('topic');
   const [page, setPage] = useState<Page>(requestedSettings ? 'settings' : 'activity');
@@ -237,29 +229,55 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
   const firstState = useRef(false);
   const generation = useDraft(generationValue, m),
     speech = useDraft(speechValue, m);
+  const reward = useRewardDraft(state);
   const [selected, setSelected] = useState<string | null>(null);
   const [characters, setCharacters] = useState<Record<string, CharacterDraft>>({});
   const charactersRef = useRef(characters);
   charactersRef.current = characters;
   const [characterError, setCharacterError] = useState('');
-  const [dialog, setDialog] = useState<'diagnostics' | 'restart' | 'quit' | null>(null);
+  const [dialog, setDialog] = useState<'diagnostics' | 'restart' | null>(null);
   const [lifecycle, setLifecycle] = useState('');
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const [testVoiceId, setTestVoiceId] = useState('');
   const [obsTestId, setObsTestId] = useState('');
   const obsSubmission = useRef<{ voiceId: string; eventId: string } | null>(null);
+  const evidenceRevision = m?.testRevision;
+  const previousEvidenceRevision = useRef(evidenceRevision);
+  useEffect(() => {
+    const previous = previousEvidenceRevision.current;
+    previousEvidenceRevision.current = evidenceRevision;
+    if (previous === undefined || previous === evidenceRevision) return;
+    const body = obsSubmission.current
+      ? { eventId: obsSubmission.current.eventId }
+      : obsTestId
+        ? { requestId: obsTestId }
+        : null;
+    if (body) void server.command('/api/test/obs/cancel', body).catch(() => {});
+    setObsTestId('');
+    obsSubmission.current = null;
+  }, [evidenceRevision]);
   const blocked = !view.connected || view.pending || !!lifecycle;
   const formDisabled = !view.connected || !!lifecycle;
   const hasDirty =
-    generation.dirty || speech.dirty || Object.values(characters).some((d) => d.dirty);
+    generation.dirty ||
+    speech.dirty ||
+    reward.dirty ||
+    Object.values(characters).some((d) => d.dirty);
+  const dirtyCharacterId = Object.keys(characters).find((id) => characters[id]?.dirty);
+  useEffect(() => {
+    if (page === 'setup' && dirtyCharacterId && selected !== dirtyCharacterId)
+      setSelected(dirtyCharacterId);
+  }, [page, dirtyCharacterId, selected]);
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0 });
   }, [page, topic, selected]);
   useEffect(() => {
     if (m && !firstState.current) {
       firstState.current = true;
-      if (!requestedSettings && (!m.setupSeen || !m.localReady)) setPage('setup');
+      if (!requestedSettings && (!m.setupSeen || !m.localReady || !state?.twitchSetup?.rewardId))
+        setPage('setup');
     }
   }, [m]);
   useEffect(() => {
@@ -284,7 +302,7 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
         });
         if (!response.ok)
           throw new Error('Could not load this character. Reconnect and try again.');
-        const value: Character = await response.json();
+        const value: CharacterEditorState = await response.json();
         controller.signal.throwIfAborted();
         setCharacters((previous) =>
           previous[selected]?.dirty
@@ -312,7 +330,7 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
     })();
     return () => controller.abort();
   }, [selected, view.connected, m?.revision]);
-  function editCharacter(patch: Partial<Character>) {
+  function editCharacter(patch: Partial<CharacterEditorState>) {
     if (!selected) return;
     setCharacters((previous) => {
       const current = previous[selected];
@@ -330,7 +348,7 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
           };
     });
   }
-  async function saveCharacter() {
+  async function saveCharacter(voiceOnly = false) {
     if (!selected) return;
     const id = selected,
       sent = characters[id];
@@ -338,7 +356,11 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
     try {
       const result = await server.command<PlaybackState>(
         `/api/characters/${encodeURIComponent(id)}`,
-        { prompt: sent.value.prompt, voiceId: sent.value.voiceId },
+        {
+          ...(voiceOnly ? {} : { prompt: sent.value.prompt }),
+          voiceId: sent.value.voiceId,
+          available: voiceOnly || (sent.value.available ?? false),
+        },
       );
       setCharacters((previous) =>
         previous[id]?.epoch !== sent.epoch
@@ -347,7 +369,8 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
               ...previous,
               [id]: {
                 ...sent,
-                original: sent.value,
+                value: voiceOnly ? { ...sent.value, available: true } : sent.value,
+                original: voiceOnly ? { ...sent.value, available: true } : sent.value,
                 dirty: false,
                 feedback: result.management?.pending
                   ? 'Saved. Applies after the current reply.'
@@ -374,14 +397,14 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
   async function check(section: 'generation' | 'speech') {
     const draft = section === 'speech' ? speech : generation;
     const sent = draft.epoch.current;
-    const revision = m?.revision;
+    const revision = m?.testRevision;
     try {
       const result = await server.command<{ ok: boolean; message: string }>(
         '/api/check/connection',
         { section },
         12000,
       );
-      if (draft.epoch.current === sent && currentRevision.current === revision)
+      if (draft.epoch.current === sent && currentTestRevision.current === revision)
         draft.setCheck({
           ok: result.ok,
           message: result.ok
@@ -389,21 +412,20 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
             : result.message,
         });
     } catch (error) {
-      if (draft.epoch.current === sent && currentRevision.current === revision)
+      if (draft.epoch.current === sent && currentTestRevision.current === revision)
         draft.setCheck({
           ok: false,
           message: error instanceof Error ? error.message : 'Could not check.',
         });
     }
   }
-  async function lifecycleAction() {
-    if (dialog !== 'restart' && dialog !== 'quit') return;
+  async function lifecycleAction(action: 'restart' | 'quit') {
     try {
-      await server.command(`/api/app/${dialog}`, { confirmed: true });
+      await server.command(`/api/app/${action}`, { confirmed: true });
       setLifecycle(
-        dialog === 'restart'
+        action === 'restart'
           ? 'Restarting. Refresh this page when the app is ready.'
-          : 'App shut down. Use Launch MomoiTTS to reopen it.',
+          : 'Closing MomoiTTS. You can close this tab; use Launch MomoiTTS to reopen it.',
       );
       setDialog(null);
       server.suspend();
@@ -415,18 +437,23 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
     try {
       await navigator.clipboard.writeText(`${location.origin}/player`);
       setCopied(true);
+      setCopyFailed(false);
     } catch {
       setCopied(false);
+      setCopyFailed(true);
     }
   }
   const playerMessage = !view.connected
     ? 'Server offline'
     : state?.status === 'blocked'
-      ? 'Audio blocked'
+      ? 'Browser playback is blocked. In OBS, use Interact on the source and click its blank page.'
       : state?.playerConnected
-        ? 'Audio source connected'
-        : 'Audio source disconnected';
+        ? 'Audio source connected. Check the OBS mixer and a recording to confirm stream audio.'
+        : 'No audio source connected yet. Add the Browser source in OBS using the address shown on this page.';
   const chosenCharacter = selected ? characters[selected] : undefined;
+  useEffect(() => {
+    if (page === 'setup') setTestVoiceId(chosenCharacter?.original.voiceId ?? '');
+  }, [page, chosenCharacter?.original.voiceId]);
   const generationForm = (
     <>
       <form
@@ -442,21 +469,21 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
           <>
             <FormField
               id="generation-key"
-              label="API key"
+              label="OpenRouter API key"
               description={
                 m?.generation.keyConfigured ? (
                   'A saved key is kept unless you enter a replacement.'
                 ) : (
                   <>
-                    Create a key in your{' '}
+                    Open{' '}
                     <a
                       href="https://openrouter.ai/settings/keys"
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      OpenRouter account
-                    </a>
-                    .
+                      OpenRouter API Keys
+                    </a>{' '}
+                    to create a key, then paste it here.
                   </>
                 )
               }
@@ -475,13 +502,13 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
             </FormField>
             <FormField
               id="model"
-              label="Model"
+              label="Model ID"
               description={
                 <>
                   <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer">
                     Browse OpenRouter models
                   </a>{' '}
-                  and copy its model ID here.
+                  and copy the model ID, not its name or URL. Check its price before testing.
                 </>
               }
             >
@@ -490,21 +517,29 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
                 disabled={formDisabled}
                 value={generation.draft.model}
                 onChange={(event) => generation.edit({ model: event.target.value })}
-                placeholder="provider/model"
+                placeholder="organization/model"
               />
             </FormField>
 
-            <FormField id="tokens" label="Maximum response tokens">
-              <Input
+            {page === 'setup' ? null : (
+              <FormField
                 id="tokens"
-                type="number"
-                min={64}
-                max={16384}
-                disabled={formDisabled}
-                value={generation.draft.maxTokens}
-                onChange={(event) => generation.edit({ maxTokens: Number(event.target.value) })}
-              />
-            </FormField>
+                label="Maximum response tokens"
+                description="Leave 1024 for setup. This limits model output; spoken replies have a separate 60-word limit."
+              >
+                <Input
+                  id="tokens"
+                  type="number"
+                  min={64}
+                  max={16384}
+                  required
+                  step={1}
+                  disabled={formDisabled}
+                  value={Number.isNaN(generation.draft.maxTokens) ? '' : generation.draft.maxTokens}
+                  onChange={(event) => generation.edit({ maxTokens: event.target.valueAsNumber })}
+                />
+              </FormField>
+            )}
           </>
         </FieldGroup>
         <SaveActions
@@ -538,11 +573,15 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
                 'A saved key is kept unless you enter a replacement.'
               ) : (
                 <>
-                  Create a key in your{' '}
-                  <a href="https://fish.audio" target="_blank" rel="noopener noreferrer">
-                    Fish Audio account
-                  </a>
-                  .
+                  Open{' '}
+                  <a
+                    href="https://fish.audio/app/api-keys/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Fish Audio API Keys
+                  </a>{' '}
+                  to create a key, then paste it here. Use a Fish key, not your OpenRouter key.
                 </>
               )
             }
@@ -563,8 +602,8 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
             label="Speech engine"
             description={
               speech.draft.model === 's2.1-pro-free'
-                ? 'Free developer tier: subject to fair use, with no uptime or latency guarantee. Requests may be retained for model improvement. You can change engines here later.'
-                : 'This engine may use paid Developer API credit, separate from website credits. You can change engines here; the app never switches automatically.'
+                ? 'Free under fair use; no uptime or latency guarantee. Requests may be retained for model improvement.'
+                : 'Uses Developer API credit, separate from website credits. No automatic engine switching.'
             }
           >
             <Select
@@ -603,44 +642,137 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
     </>
   );
   const characterList = (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <ul className="flex flex-col gap-3">
       {m?.characters.map((character) => (
-        <Card key={character.id} className="gap-4">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3">
+        <li key={character.id}>
+          <Button
+            variant="outline"
+            className="h-auto w-full justify-between gap-4 px-5 py-4 text-left"
+            onClick={() => setSelected(character.id)}
+            aria-label={'Edit ' + character.name}
+          >
+            <span className="flex min-w-0 items-center gap-4">
               <span
-                className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+                className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-lg text-primary"
                 aria-hidden="true"
               >
                 {character.name[0]}
               </span>
-              {character.name}
-            </CardTitle>
-            <CardDescription>
-              {character.voiceConfigured
-                ? 'Voice assigned'
-                : 'Choose a voice to complete this character.'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setSelected(character.id)}
-              aria-label={'Edit ' + character.name}
-            >
-              Edit character
+              <span className="truncate text-base font-semibold">{character.name}</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-3">
+              <Badge
+                variant={
+                  !character.voiceConfigured ? 'warning' : character.available ? 'success' : 'quiet'
+                }
+              >
+                {!character.voiceConfigured
+                  ? 'Needs voice'
+                  : character.available
+                    ? 'Available'
+                    : 'Disabled'}
+              </Badge>
               <ChevronRight data-icon="inline-end" />
-            </Button>
-          </CardContent>
-        </Card>
+            </span>
+          </Button>
+        </li>
       ))}
       {!m?.characters.length ? (
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          No characters are available. Check the catalog files.
-        </p>
+        <li className="text-sm text-muted-foreground">No characters in the catalog.</li>
       ) : null}
-    </div>
+    </ul>
+  );
+  function discardCharacter() {
+    if (!selected) return;
+    setCharacters((previous) => {
+      const current = previous[selected];
+      return !current
+        ? previous
+        : {
+            ...previous,
+            [selected]: {
+              ...current,
+              value: current.original,
+              dirty: false,
+              epoch: current.epoch + 1,
+              feedback: 'Changes discarded.',
+              feedbackTone: 'info',
+            },
+          };
+    });
+  }
+  const characterVoiceField = chosenCharacter ? (
+    <FormField
+      id="character-voice"
+      label="Fish Audio voice ID"
+      description={
+        chosenCharacter.value.voiceOverridden ? (
+          'This voice is set by an environment override. Change that configuration to replace it.'
+        ) : (
+          <>
+            Browse voices on{' '}
+            <a href="https://fish.audio" target="_blank" rel="noopener noreferrer">
+              Fish Audio
+            </a>
+            : copy the 32-character ID after /m/ in the voice URL.
+          </>
+        )
+      }
+    >
+      <Input
+        id="character-voice"
+        autoComplete="off"
+        required={page === 'setup'}
+        pattern={page === 'setup' ? '[a-fA-F0-9]{32}' : undefined}
+        disabled={formDisabled || chosenCharacter.value.voiceOverridden}
+        value={chosenCharacter.value.voiceId}
+        onChange={(event) => editCharacter({ voiceId: event.target.value })}
+        placeholder="Paste the 32-character voice ID"
+      />
+    </FormField>
+  ) : null;
+  const pendingInstructions =
+    !!chosenCharacter?.dirty && chosenCharacter.value.prompt !== chosenCharacter.original.prompt;
+  const setupVoice = chosenCharacter ? (
+    <form
+      className="flex flex-col gap-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!pendingInstructions) void saveCharacter(true);
+      }}
+    >
+      <p className="text-sm text-muted-foreground">
+        Voice for <strong className="text-foreground">{chosenCharacter.value.name}</strong>
+      </p>
+      <FieldGroup>{characterVoiceField}</FieldGroup>
+      {pendingInstructions ? (
+        <div className="flex flex-col items-start gap-2">
+          <FeedbackBanner
+            message="Save or discard your instruction draft in Characters first."
+            tone="warning"
+          />
+          <Button type="button" variant="outline" onClick={() => setPage('characters')}>
+            Review draft
+          </Button>
+        </div>
+      ) : null}
+      {!pendingInstructions ? (
+        <SaveActions
+          label={'Save voice and enable ' + chosenCharacter.value.name}
+          disabled={
+            blocked ||
+            !/^[a-f0-9]{32}$/iu.test(chosenCharacter.value.voiceId) ||
+            (!chosenCharacter.dirty && !!chosenCharacter.original.available)
+          }
+          dirty={chosenCharacter.dirty}
+          onDiscard={discardCharacter}
+          feedback={chosenCharacter.feedback}
+          feedbackTone={chosenCharacter.feedbackTone}
+        />
+      ) : null}
+    </form>
+  ) : (
+    <p className="text-sm text-muted-foreground">{characterError || 'Loading voice settings…'}</p>
   );
   const characterEditor = chosenCharacter ? (
     <form
@@ -651,10 +783,27 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
       }}
     >
       <FieldGroup>
+        {characterVoiceField}
+        <Field>
+          <FieldLabel
+            htmlFor="character-available"
+            className="flex w-fit cursor-pointer items-center gap-3 py-2"
+          >
+            <input
+              id="character-available"
+              type="checkbox"
+              className="size-4 shrink-0 accent-primary"
+              checked={chosenCharacter.value.available ?? false}
+              disabled={formDisabled}
+              onChange={(event) => editCharacter({ available: event.target.checked })}
+            />
+            Available to viewers
+          </FieldLabel>
+        </Field>
         <FormField
           id="character-prompt"
-          label="Character instructions"
-          description="Describe their personality, tone and how they answer questions."
+          label="Instructions"
+          description="Sent to OpenRouter with each question."
         >
           <Textarea
             id="character-prompt"
@@ -662,58 +811,15 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
             value={chosenCharacter.value.prompt}
             onChange={(event) => editCharacter({ prompt: event.target.value })}
             rows={10}
-            className="min-h-56 resize-y"
-          />
-        </FormField>
-        <FormField
-          id="character-voice"
-          label="Voice"
-          description={
-            chosenCharacter.value.voiceOverridden ? (
-              'This voice is set by an environment override. Change that configuration to replace it.'
-            ) : (
-              <>
-                Choose a voice from{' '}
-                <a href="https://fish.audio" target="_blank" rel="noopener noreferrer">
-                  Fish Audio
-                </a>{' '}
-                and paste its voice ID.
-              </>
-            )
-          }
-        >
-          <Input
-            id="character-voice"
-            autoComplete="off"
-            disabled={formDisabled || chosenCharacter.value.voiceOverridden}
-            value={chosenCharacter.value.voiceId}
-            onChange={(event) => editCharacter({ voiceId: event.target.value })}
-            placeholder="Paste the voice ID"
+            style={{ fieldSizing: 'fixed' }}
+            className="h-64 min-h-48 resize-y leading-relaxed"
           />
         </FormField>
       </FieldGroup>
       <SaveActions
         disabled={blocked || !chosenCharacter.dirty}
         dirty={chosenCharacter.dirty}
-        onDiscard={() =>
-          selected &&
-          setCharacters((previous) => {
-            const current = previous[selected];
-            return !current
-              ? previous
-              : {
-                  ...previous,
-                  [selected]: {
-                    ...current,
-                    value: current.original,
-                    dirty: false,
-                    epoch: current.epoch + 1,
-                    feedback: 'Changes discarded.',
-                    feedbackTone: 'info',
-                  },
-                };
-          })
-        }
+        onDiscard={discardCharacter}
         feedback={chosenCharacter.feedback}
         feedbackTone={chosenCharacter.feedbackTone}
       />
@@ -725,25 +831,38 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
   );
   const obs = (
     <>
-      <p className="text-sm leading-relaxed text-muted-foreground">
-        Add a Browser source in OBS with this address. Enable “Control audio via OBS” and leave
-        source shutdown and scene refresh off.
-      </p>
+      <ol className="flex list-decimal flex-col gap-2 pl-5 text-sm leading-relaxed text-muted-foreground">
+        <li>In OBS, use Sources → + → Browser and create a source named MomoiTTS.</li>
+        <li>Leave Local file off and paste the address below into URL.</li>
+        <li>Enable “Control audio via OBS” to give MomoiTTS its own mixer source.</li>
+        <li>
+          Leave “Shutdown source when not visible” and “Refresh browser when scene becomes active”
+          off, then click OK.
+        </li>
+      </ol>
       <div className="my-4 flex min-w-0 items-center justify-between gap-3 rounded-md border bg-background p-2 pl-3">
         <code className="min-w-0 break-all text-xs">{location.origin}/player</code>
         <Button
-          variant="ghost"
-          size="icon"
+          variant="outline"
+          size="sm"
           aria-label="Copy OBS audio source URL"
           disabled={!view.connected}
           onClick={() => void copyPlayer()}
         >
-          {copied ? <Check /> : <Copy />}
+          {copied ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />}
+          {copied ? 'Copied' : 'Copy URL'}
         </Button>
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Reuse that source across scenes. It stays invisible and plays replies when replies are on.
+        The blank source is normal. Reuse it across scenes; close ordinary /player tabs to keep
+        audio in OBS.
       </p>
+      {copyFailed ? (
+        <FeedbackBanner
+          message="Could not copy automatically. Select the address above and copy it manually into OBS."
+          tone="warning"
+        />
+      ) : null}
     </>
   );
   const obsContent = (
@@ -764,6 +883,8 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
           blocked={blocked}
           dirty={speech.dirty}
           connected={view.connected}
+          inline={page === 'setup'}
+          fixedVoice={page === 'setup'}
           voiceId={testVoiceId}
           setVoiceId={setTestVoiceId}
           characters={m?.characters ?? []}
@@ -772,94 +893,26 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
     </section>
   );
   const twitchContent = (
-    <section className="flex flex-col gap-4">
-      {state?.twitch?.channel ? (
-        <dl className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <dt className="text-sm text-muted-foreground">Channel</dt>
-            <dd>{state.twitch.channel}</dd>
-          </div>
-          <div>
-            <dt className="text-sm text-muted-foreground">Channel Points reward</dt>
-            <dd>{state.twitch.rewardTitle || 'Not configured'}</dd>
-          </div>
-        </dl>
-      ) : null}
-      <p className="text-sm leading-relaxed text-muted-foreground">
-        Follow the Channel Points instructions in the included user guide to authorize Twitch and
-        create the reward. Then connect here.
-      </p>
-      <FeedbackBanner
-        message={state?.twitch?.message || 'Not configured'}
-        tone={
-          state?.twitch?.status === 'connected'
-            ? 'success'
-            : state?.twitch?.status === 'error'
-              ? 'error'
-              : 'info'
-        }
-      />
-      {state?.twitch?.status === 'connected' ? (
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {state.twitch.live === true
-            ? 'Channel live.'
-            : state.twitch.live === false
-              ? 'Channel offline.'
-              : 'Live state unknown.'}
-        </p>
-      ) : null}
-      {state?.twitch?.settlementMessage ? (
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {state.twitch.settlementMessage}
-        </p>
-      ) : null}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          disabled={
-            blocked || !state?.twitch || !['disconnected', 'error'].includes(state.twitch.status)
-          }
-          onClick={() => void server.command('/api/twitch/connect', {}).catch(() => {})}
-        >
-          Connect Twitch
-        </Button>
-        <Button
-          variant="ghost"
-          disabled={
-            blocked || !state?.twitch || ['disabled', 'disconnected'].includes(state.twitch.status)
-          }
-          onClick={() => void server.command('/api/twitch/disconnect', {}).catch(() => {})}
-        >
-          Disconnect
-        </Button>
-      </div>
-
-      <div className="border-t pt-5 text-sm leading-relaxed text-muted-foreground">
-        <p>
-          Viewer requests are accepted while the channel is live and replies are on. Requests
-          received while replies are off are refunded.
-        </p>
-        <p className="mt-2">
-          Turning replies off or ending the stream cancels unfinished viewer requests and refunds
-          them. Turning replies on starts fresh.
-        </p>
-      </div>
-    </section>
+    <TwitchSettings state={state} server={server} blocked={blocked} draft={reward} />
   );
 
   function resultText(section: 'generation' | 'speech') {
     const result = results[section];
     if (!result) return 'Not tested during this visit';
-    if (result.revision !== m?.revision) return 'Settings changed; test again';
+    if (result.testRevision !== m?.testRevision) return 'Settings changed; test again';
     return result.ok
       ? section === 'speech'
         ? 'Speech generated; listen to confirm'
         : 'Text generation worked'
       : 'Last test failed';
   }
-  function recordResult(section: 'generation' | 'speech', result: Omit<TestResult, 'revision'>) {
+  function recordResult(
+    section: 'generation' | 'speech',
+    result: Omit<TestResult, 'testRevision'>,
+  ) {
     setResults((previous) => ({
       ...previous,
-      [section]: { ...result, revision: m?.revision ?? 0 },
+      [section]: { ...result, testRevision: m?.testRevision ?? '' },
     }));
   }
   function providerContent(section: 'generation' | 'speech') {
@@ -874,12 +927,17 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
     const result = results[section];
     return (
       <div className="flex flex-col gap-6">
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Saving makes no provider request. “Configured” means saved, not tested.
+        </p>
         {result ? (
           <FeedbackBanner
-            tone={result.revision !== m?.revision ? 'warning' : result.ok ? 'success' : 'error'}
+            tone={
+              result.testRevision !== m?.testRevision ? 'warning' : result.ok ? 'success' : 'error'
+            }
             message={
               resultText(section) +
-              (result.revision === m?.revision
+              (result.testRevision === m?.testRevision
                 ? ' · ' +
                   new Date(result.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 : '')
@@ -956,7 +1014,10 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
               </div>
             </dl>
             {m?.errors[section] ? (
-              <FeedbackBanner message={m.errors[section] ?? ''} tone="error" />
+              <FeedbackBanner
+                message={m.errors[section] ?? ''}
+                tone={keyConfigured ? 'error' : 'info'}
+              />
             ) : null}
             {m?.overrides.some((name) =>
               isGeneration
@@ -1005,6 +1066,10 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
         <section className="flex flex-col gap-3 rounded-xl border px-6 py-5">
           <h2 className="font-semibold">Check & test</h2>
 
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Connection checks verify your key. Output tests check the model or voice.
+          </p>
+
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
@@ -1016,7 +1081,7 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
             </Button>{' '}
             {isGeneration ? (
               <GenerationTest
-                key={m?.revision + ':' + generation.epoch.current}
+                key={m?.testRevision + ':' + generation.epoch.current}
                 connected={view.connected}
                 blocked={blocked}
                 dirty={generation.dirty}
@@ -1026,7 +1091,7 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
               />
             ) : (
               <SpeechTest
-                key={m?.revision + ':' + speech.epoch.current}
+                key={m?.testRevision + ':' + speech.epoch.current}
                 connected={view.connected}
                 blocked={blocked}
                 dirty={speech.dirty}
@@ -1049,11 +1114,15 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
               Save or discard changes before checking or testing.
             </p>
           ) : null}
+          {!configured && !draft.dirty ? (
+            <p className="text-sm text-muted-foreground">
+              Save the configuration above to enable these checks.
+            </p>
+          ) : null}
         </section>
       </div>
     );
   }
-  const voiceCount = m?.characters.filter((character) => character.voiceConfigured).length ?? 0;
   const topicRows = [
     {
       topic: 'generation' as const,
@@ -1096,7 +1165,7 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
                 ? ' · Offline'
                 : ' · Live state unknown'
             : '')
-        : 'Connect your Channel Points reward',
+        : 'Authorize the broadcaster, then create a viewer reward',
       status:
         state?.twitch?.status === 'connected'
           ? 'Connected'
@@ -1105,7 +1174,11 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
             : state?.twitch?.status === 'disabled'
               ? 'Needs setup'
               : 'Not connected',
-      next: state?.twitch?.message || 'Assisted account setup',
+      next: state?.twitchSetup?.rewardId
+        ? state?.twitch?.message || 'Check Twitch connection'
+        : state?.twitchSetup?.authorized
+          ? 'Authorization saved; return here to create the reward after the other setup steps'
+          : 'Sign in and approve MomoiTTS on Twitch; no reward is created yet',
     },
   ];
   const settingsOverview = (
@@ -1145,7 +1218,9 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
                 </Badge>
               </div>
               <p className="break-words text-sm text-muted-foreground">{item.detail}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{item.next}</p>
+              {['Configured', 'Connected', 'Needs attention'].includes(item.status) ? (
+                <p className="mt-1 text-xs text-muted-foreground">{item.next}</p>
+              ) : null}
             </div>
             <ChevronRight
               className="mt-1 size-5 shrink-0 text-muted-foreground group-hover:text-foreground sm:mt-0"
@@ -1154,30 +1229,11 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
           </button>
         ))}
       </div>
-      {voiceCount < (m?.characters.length ?? 0) ? (
+      {!m?.characters.some((character) => character.available && character.voiceConfigured) ? (
         <FeedbackBanner
           tone="warning"
-          message="Assign missing voices in Characters before turning replies on."
+          message="Configure and enable at least one character in Characters before turning replies on."
         />
-      ) : null}
-      {page === 'setup' ? (
-        <div className="flex flex-col items-start gap-3 border-t pt-6">
-          <Button
-            disabled={blocked || hasDirty}
-            onClick={() =>
-              void server
-                .command('/api/config/application', { setupSeen: true })
-                .then(() => setPage('activity'))
-                .catch(() => {})
-            }
-          >
-            Open Activity
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            You can open Activity now. Viewer replies stay off until the required services and
-            character voices are configured.
-          </p>
-        </div>
       ) : null}
     </div>
   );
@@ -1190,7 +1246,8 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
         if (next === 'settings' || next === 'setup') setTopic('overview');
       }}
       onDialog={setDialog}
-      needsSetup={!m?.setupSeen || !m?.localReady}
+      onExit={() => void lifecycleAction('quit')}
+      needsSetup={!m?.setupSeen || !m?.localReady || !state?.twitchSetup?.rewardId}
       playerMessage={playerMessage}
       audioConnected={view.connected && !!state?.playerConnected && state.status !== 'blocked'}
       blocked={blocked}
@@ -1198,8 +1255,7 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
     >
       <div ref={contentRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {state &&
-        (((page === 'settings' || page === 'setup') && topic !== 'overview') ||
-          (page === 'characters' && selected)) ? (
+        ((page === 'settings' && topic !== 'overview') || (page === 'characters' && selected)) ? (
           <Button
             variant="ghost"
             className="mx-4 mt-4 w-fit shrink-0 self-start md:mx-8"
@@ -1265,15 +1321,63 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
               />
             </Suspense>
           </>
-        ) : page === 'settings' || page === 'setup' ? (
+        ) : page === 'setup' ? (
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-7 px-4 py-8 md:px-8 md:py-10">
+            <SetupJourney
+              state={state}
+              server={server}
+              connected={view.connected && !lifecycle}
+              blocked={blocked}
+              dirty={hasDirty}
+              dirtyStep={
+                generation.dirty || speech.dirty || dirtyCharacterId
+                  ? 1
+                  : reward.dirty
+                    ? 3
+                    : undefined
+              }
+              dirtyPrepare={
+                generation.dirty ? 0 : speech.dirty ? 1 : dirtyCharacterId ? 2 : undefined
+              }
+              selectedCharacterId={selected}
+              selectedCharacter={chosenCharacter?.original}
+              onChooseCharacter={setSelected}
+              obsRequestId={obsTestId}
+              connectContent={
+                <TwitchSettings
+                  state={state}
+                  server={server}
+                  blocked={blocked}
+                  draft={reward}
+                  mode="connect"
+                />
+              }
+              generationContent={generationForm}
+              speechContent={speechForm}
+              voiceContent={setupVoice}
+              obsContent={obsContent}
+              rewardContent={
+                <TwitchSettings
+                  state={state}
+                  server={server}
+                  blocked={blocked}
+                  draft={reward}
+                  mode="reward"
+                />
+              }
+              onComplete={() => {
+                void server
+                  .command('/api/config/application', { setupSeen: true })
+                  .then(() => setPage('activity'))
+                  .catch(() => {});
+              }}
+            />
+          </div>
+        ) : page === 'settings' ? (
           <div className="mx-auto flex w-full max-w-4xl flex-col gap-7 px-4 py-8 md:px-8 md:py-10">
             <header className="flex flex-col gap-3">
               <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-                {topic === 'overview'
-                  ? page === 'setup'
-                    ? 'Set up MomoiTTS'
-                    : 'Settings'
-                  : topicNames[topic]}
+                {topic === 'overview' ? 'Settings' : topicNames[topic]}
               </h1>
               <p className="max-w-2xl leading-relaxed text-muted-foreground">
                 {topic === 'overview'
@@ -1281,14 +1385,16 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
                   : topicDescriptions[topic]}
               </p>
             </header>
-            {generation.dirty || speech.dirty ? (
+            {generation.dirty || speech.dirty || reward.dirty ? (
               <p role="status" className="text-sm text-primary">
                 Unsaved changes in{' '}
-                {generation.dirty && speech.dirty
-                  ? 'Generation and Speech'
-                  : generation.dirty
-                    ? 'Generation'
-                    : 'Speech'}
+                {[
+                  generation.dirty && 'Generation',
+                  speech.dirty && 'Speech',
+                  reward.dirty && 'Twitch reward',
+                ]
+                  .filter(Boolean)
+                  .join(', ')}
                 . Drafts are kept while you move between pages.
               </p>
             ) : null}
@@ -1307,28 +1413,13 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
             )}
           </div>
         ) : page === 'characters' ? (
-          <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 md:px-8 md:py-10">
-            <header className="flex flex-col gap-2">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8 md:px-8 md:py-10">
+            <header>
               <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
                 {selected ? chosenCharacter?.value.name || 'Character' : 'Characters'}
               </h1>
-              <p className="text-muted-foreground">
-                {selected
-                  ? 'Give this character a personality and a voice.'
-                  : 'Choose a character to edit their instructions and voice.'}
-              </p>
             </header>
-            {selected ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Personality & voice</CardTitle>
-                  <CardDescription>These instructions stay private to this app.</CardDescription>
-                </CardHeader>
-                <CardContent>{characterEditor}</CardContent>
-              </Card>
-            ) : (
-              characterList
-            )}
+            {selected ? characterEditor : characterList}
           </div>
         ) : null}
       </div>
@@ -1385,18 +1476,12 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {dialog === 'diagnostics'
-                ? 'Diagnostics'
-                : dialog === 'restart'
-                  ? 'Restart MomoiTTS?'
-                  : 'Shut down MomoiTTS?'}
+              {dialog === 'diagnostics' ? 'Diagnostics' : 'Restart MomoiTTS?'}
             </DialogTitle>
             <DialogDescription>
               {dialog === 'diagnostics'
                 ? 'Current setup and connection status.'
-                : dialog === 'restart'
-                  ? 'Active replies stop and waiting questions are cleared. Replies stay off until you turn them on.'
-                  : 'Active replies stop and waiting questions are cleared.'}
+                : 'Active replies stop and waiting questions are cleared. Replies stay off until you turn them on.'}
             </DialogDescription>
           </DialogHeader>
           {dialog === 'diagnostics' ? (
@@ -1422,8 +1507,8 @@ export function App({ view, server }: { view: ServerView; server: Server }) {
               <Button variant="outline" onClick={() => setDialog(null)}>
                 Cancel
               </Button>
-              <Button disabled={blocked} onClick={() => void lifecycleAction()}>
-                {dialog === 'restart' ? 'Restart app' : 'Shut down app'}
+              <Button disabled={blocked} onClick={() => void lifecycleAction('restart')}>
+                Restart app
               </Button>
             </div>
           )}

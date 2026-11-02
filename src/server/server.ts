@@ -10,6 +10,7 @@ import type { SettingsSection } from '../shared/protocol.ts';
 interface HttpRuntime {
   session: PlaybackSession;
   canQuit: boolean;
+  exiting?: boolean;
   snapshot(): PlaybackState;
   configurationProof(nonce: string): string | undefined;
   quit(): void;
@@ -25,6 +26,11 @@ interface HttpRuntime {
   disconnectTwitch(): void;
   characterEditor(id: string): unknown;
   saveCharacter(id: string, body: Record<string, unknown>): unknown;
+  twitchAction(
+    action: string,
+    body: Record<string, unknown>,
+    signal: AbortSignal,
+  ): Promise<unknown>;
 }
 
 export function createHttpServer(runtime: HttpRuntime) {
@@ -107,6 +113,10 @@ export function createHttpServer(runtime: HttpRuntime) {
         json(404, { error: 'Not found.' });
         return;
       }
+      if (runtime.exiting && url.pathname !== '/api/app/quit') {
+        json(409, { error: 'MomoiTTS is exiting.' });
+        return;
+      }
       if (!hosts.some((host) => request.headers.origin === `http://${host}`)) {
         json(403, { error: 'Same-origin controls required.' });
         return;
@@ -145,6 +155,26 @@ export function createHttpServer(runtime: HttpRuntime) {
       if (url.pathname === '/api/twitch/connect') {
         runtime.connectTwitch();
         json(200, snapshot());
+        return;
+      }
+      if (
+        ['/api/twitch/authorize', '/api/twitch/cancel', '/api/twitch/reward'].includes(url.pathname)
+      ) {
+        const cancel = new AbortController();
+        const abort = () => cancel.abort();
+        response.once('close', abort);
+        try {
+          json(
+            200,
+            await runtime.twitchAction(
+              url.pathname.slice('/api/twitch/'.length),
+              body,
+              cancel.signal,
+            ),
+          );
+        } finally {
+          response.removeListener('close', abort);
+        }
         return;
       }
       if (url.pathname === '/api/app/restart') {

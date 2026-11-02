@@ -7,16 +7,19 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { ApiClient } from '@twurple/api';
-import { RefreshingAuthProvider } from '@twurple/auth';
 import { saveToken, loadToken } from '../src/twitch/token-store.ts';
 import { twurpleTransport } from '../src/twitch/transport.ts';
 import { TwitchIntake } from '../src/twitch/intake.ts';
-import { createReward } from '../src/twitch/reward.ts';
 import { RequestQueue } from '../src/queue/request-queue.ts';
 
 const clientId = 'testclient123456';
-const config = { clientId, channel: 'lacari', rewardTitle: 'Ask Tyrone', rewardCost: 1000 };
+const config = {
+  clientId,
+  channel: 'lacari',
+  rewardTitle: 'Ask Tyrone',
+  rewardCost: 1000,
+  rewardId: 'reward1',
+};
 const root = await mkdtemp(path.join(tmpdir(), 'tyrone-twitch-'));
 const file = pathToFileURL(path.join(root, 'token.json'));
 const previousMockPort = process.env.TWURPLE_MOCK_API_PORT;
@@ -33,8 +36,9 @@ globalThis.setTimeout = ((
 let refreshed = 0,
   connections = 0,
   validationCalls = 0,
-  rewardCreates = 0;
-let rewardExists = false;
+  rewardCreates = 0,
+  rewardUpdates = 0;
+let rewardExists = true;
 let socket: WebSocket | undefined;
 const subscriptions: Record<string, unknown>[] = [];
 const unexpected: string[] = [];
@@ -134,6 +138,14 @@ const server = createServer((request, response) => {
           : [],
       };
     } else if (url.pathname === '/mock/channel_points/custom_rewards') {
+      if (request.method === 'PATCH') {
+        let raw = '';
+        for await (const chunk of request) raw += String(chunk);
+        const body = JSON.parse(raw);
+        assert.equal(typeof body.is_paused, 'boolean');
+        rewardUpdates++;
+        Object.assign(reward, body);
+      }
       if (request.method === 'POST') {
         let raw = '';
         for await (const chunk of request) raw += String(chunk);
@@ -303,18 +315,14 @@ try {
     },
     file,
   );
-  // Explicit reward setup is idempotent. No reward is created by application connect.
-  const auth = new RefreshingAuthProvider({ clientId });
-  await auth.addUserForToken((await loadToken(file)).token);
-  const setupApi = new ApiClient({ authProvider: auth, logger: { custom: () => {} } });
-  await createReward(setupApi, '123', config);
-  await createReward(setupApi, '123', config);
-  assert.equal(rewardCreates, 1);
+  // A fixture-owned reward already exists; connection must never create another.
   intake.connect();
   await until(() => intake.snapshot().status === 'connected');
   assert(refreshed >= 1);
   assert(validationCalls >= 2);
-  assert.equal(rewardCreates, 1);
+  assert.equal(rewardCreates, 0);
+  await until(() => rewardUpdates > 0);
+  assert.equal(reward.is_paused, true);
   assert.equal((await loadToken(file)).token.refreshToken, 'dummy-new-refresh');
   assert.equal(subscriptions.length, 4);
   for (const subscription of subscriptions) {
@@ -404,7 +412,7 @@ try {
   await until(() => intake.snapshot().status === 'error');
   assert.deepEqual(unexpected, []);
   console.log(
-    'Actual Twurple SDK passed against a local mock: reward setup, broadcaster auth/refresh, redemption and stream subscriptions, live-only admission, stream-end cancellation, completion reconciliation, moderation cancellation, reconnect, and revocation. No Twitch access.',
+    'Actual Twurple SDK passed against a local mock: owned reward discovery/pausing, broadcaster auth/refresh, redemption and stream subscriptions, live-only admission, stream-end cancellation, completion reconciliation, moderation cancellation, reconnect, and revocation. No Twitch access.',
   );
 } finally {
   intake.disconnect();

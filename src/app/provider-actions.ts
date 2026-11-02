@@ -21,16 +21,16 @@ export function configuredPipeline(store: SettingsStore): QueuePipeline | undefi
     return undefined;
   }
 }
-export function testText(value: unknown): string {
+export function testText(value: unknown, maxCharacters = 1000): string {
   if (
     typeof value !== 'string' ||
     !value.trim() ||
-    value.trim().length > 1000 ||
+    value.trim().length > maxCharacters ||
     Buffer.byteLength(value.trim(), 'utf8') > 4000 ||
     /[\p{Cc}&&[^\n\r\t]]/v.test(value)
   )
     throw new RequestInputError(
-      'Enter text containing 1–1000 characters (at most 4000 UTF-8 bytes).',
+      `Enter text containing 1–${maxCharacters} characters (at most 4000 UTF-8 bytes).`,
     );
   return value.trim();
 }
@@ -44,7 +44,7 @@ export async function testSpeech(
   body: Record<string, unknown>,
   signal: AbortSignal,
 ) {
-  const text = testText(body.text);
+  const text = testText(body.text, 4000);
   const voiceId = testVoiceId(body.voiceId);
   if (!store.snapshot().speech.ready)
     throw new RequestInputError(

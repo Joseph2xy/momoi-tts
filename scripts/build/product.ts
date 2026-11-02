@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { cp, lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,8 +28,9 @@ try {
     '.generated/web',
     'README.md',
     'START HERE.txt',
-    'Setup MomoiTTS.cmd',
     'Launch MomoiTTS.cmd',
+    'Update MomoiTTS.cmd',
+    'config/twitch-app.json',
   ])
     await rejectLinks(join(root, path));
 
@@ -57,7 +58,7 @@ try {
     '--outDir',
     compiled,
   ]);
-  for (const folder of ['src', 'scripts/launch', 'scripts/twitch'])
+  for (const folder of ['src', 'scripts/launch'])
     await cp(join(compiled, folder), join(product, folder), { recursive: true });
   for (const folder of ['characters', 'config/examples', 'scripts/windows'])
     await cp(join(root, folder), join(product, folder), { recursive: true, dereference: false });
@@ -65,7 +66,13 @@ try {
     recursive: true,
     filter: (source) => !source.endsWith('build-fingerprint.txt'),
   });
-  for (const file of ['README.md', 'START HERE.txt', 'Setup MomoiTTS.cmd', 'Launch MomoiTTS.cmd'])
+  for (const file of [
+    'README.md',
+    'START HERE.txt',
+    'Launch MomoiTTS.cmd',
+    'Update MomoiTTS.cmd',
+    'config/twitch-app.json',
+  ])
     await cp(join(root, file), join(product, file));
 
   const sourceManifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
@@ -88,8 +95,6 @@ try {
         engines: sourceManifest.engines,
         scripts: {
           start: 'node scripts/launch/run.js',
-          'twitch:login': 'node --env-file=.local/twitch.env scripts/twitch/login.js',
-          'twitch:reward': 'node --env-file=.local/twitch.env scripts/twitch/reward.js',
         },
         dependencies,
       },
@@ -111,6 +116,31 @@ try {
     [npmCli, 'install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'],
     product,
   );
+  await run(
+    process.execPath,
+    [npmCli, 'ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'],
+    product,
+  );
+  // Recipient dependencies run as JavaScript; compiler-only declarations/cache do not ship.
+  async function prune(directory: string) {
+    if (!resolve(directory).startsWith(resolve(product) + '\\'))
+      throw new Error('Unsafe product cleanup path.');
+    for (const file of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, file.name);
+      if (file.isDirectory()) {
+        if (file.name === '@types' || file.name === 'undici-types')
+          await rm(path, { recursive: true });
+        else await prune(path);
+      } else if (/\.d\.ts(?:\.map)?$/u.test(file.name) || file.name === '.package-lock.json')
+        await rm(path);
+    }
+  }
+  await prune(join(product, 'node_modules'));
+  const runtimeRoot = process.env.MOMOI_TTS_PACKAGE_RUNTIME;
+  if (!runtimeRoot) throw new Error('Prepare the pinned Windows runtime before packaging.');
+  await mkdir(join(product, 'runtime'));
+  await cp(join(runtimeRoot, 'node.exe'), join(product, 'runtime/node.exe'));
+  await cp(join(runtimeRoot, 'LICENSE'), join(product, 'runtime/LICENSE'));
 
   const notices: string[] = ['Third-party software included in or required by MomoiTTS.\n'];
   for (const [path, value] of Object.entries(sourceLock.packages)) {
@@ -126,6 +156,32 @@ try {
     }
   }
   await writeFile(join(product, 'THIRD PARTY NOTICES.txt'), notices.join('\n'));
+  const manifestFiles: Record<string, string> = {};
+  async function manifest(directory: string) {
+    for (const file of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, file.name);
+      if (file.isDirectory()) await manifest(path);
+      else
+        manifestFiles[path.slice(product.length + 1).replaceAll('\\', '/')] = createHash('sha256')
+          .update(await readFile(path))
+          .digest('hex');
+    }
+  }
+  await manifest(product);
+  await writeFile(
+    join(product, 'release.json'),
+    JSON.stringify(
+      {
+        app: 'momoitts',
+        schema: 1,
+        version: sourceManifest.version,
+        runtime: '24.21.0',
+        files: manifestFiles,
+      },
+      null,
+      2,
+    ) + '\n',
+  );
   console.log(product);
 } catch (error) {
   await rm(staging, { recursive: true, force: true });

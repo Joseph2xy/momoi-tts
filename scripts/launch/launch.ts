@@ -74,14 +74,19 @@ async function launch() {
     try {
       for (let attempt = 0; attempt < 40; attempt++) {
         if (exited)
-          throw new Error('MomoiTTS could not start. Run npm start to see the startup message.');
+          throw new Error(
+            'MomoiTTS could not start. Check the private launcher logs or re-extract the complete release.',
+          );
         if (await running()) {
           ready = true;
           break;
         }
         await delay(250);
       }
-      if (!ready) throw new Error('MomoiTTS did not become ready. Run npm start to check startup.');
+      if (!ready)
+        throw new Error(
+          'MomoiTTS did not become ready. Check the private launcher logs before retrying.',
+        );
     } catch (error) {
       if (!exited) child.kill();
       throw error;

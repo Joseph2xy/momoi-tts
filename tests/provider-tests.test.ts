@@ -46,13 +46,9 @@ test('Settings provider tests are independent, bounded and preserve trusted dial
       { dialogue: 'A short reply.' },
     );
     assert.equal(runtime.snapshot().queue?.requests.length, 0);
+    runtime.session.queue.setPipeline(testPipeline());
     runtime.session.setRepliesEnabled(true);
-    runtime.session.queue.submit(
-      'Waiting viewer',
-      'Tyrone: Waiting',
-      'waiting-provider-test',
-      testPipeline(),
-    );
+    runtime.session.queue.submit('Waiting viewer', 'Tyrone: Waiting', 'waiting-provider-test');
     await runtime.testResponse({ text: 'Works with queued work' }, emptySignal());
     assert.equal(runtime.snapshot().queue?.waitingIds.length, 1);
     runtime.session.queue.clear();
@@ -105,6 +101,23 @@ test('Settings provider tests are independent, bounded and preserve trusted dial
       runtime.testSpeech({ text: 'phrase', voiceId: 'bad' }, emptySignal()),
       /32 hexadecimal/,
     );
+    const generatedDialogue = 'x'.repeat(1001);
+    let speechCalls = 0;
+    globalThis.fetch = async (_url, init) => {
+      speechCalls++;
+      assert.equal(JSON.parse(String(init?.body)).text, generatedDialogue);
+      return new Response(audio);
+    };
+    assert.deepEqual(
+      await runtime.testSpeech({ text: generatedDialogue, voiceId: voice }, emptySignal()),
+      audio,
+      'Speech previews accept generated dialogue longer than the question character limit.',
+    );
+    for (const text of ['x'.repeat(4001), 'é'.repeat(2001), 'a\u0000b', ''])
+      await assert.rejects(runtime.testSpeech({ text, voiceId: voice }, emptySignal()), /4000/);
+    assert.equal(speechCalls, 1, 'Invalid speech text is rejected before provider dispatch.');
+    await assert.rejects(runtime.testResponse({ text: generatedDialogue }, emptySignal()), /1000/);
+    assert.equal(speechCalls, 1, 'Generation questions retain their 1000-character limit.');
     globalThis.fetch = async () =>
       new Response('dummy-speech-secret private provider detail', { status: 402 });
     await assert.rejects(
@@ -239,6 +252,102 @@ test('Saved configuration cancels previews across clients while rejected saves p
   }
 });
 
+test('Setup output tests cancel on lifecycle changes and never play late speech', async () => {
+  const originalFetch = globalThis.fetch;
+  const dir = await mkdtemp(join(tmpdir(), 'momoitts-setup-output-cancel-'));
+  const store = new SettingsStore({ privateRoot: dir, env: { FISH_API_KEY: 'dummy-key' } });
+  try {
+    for (const action of [
+      'cancel',
+      'cancel-event',
+      'off',
+      'on',
+      'disconnect',
+      'quit',
+      'restart',
+      'close',
+      'generation',
+      'speech',
+      'character',
+      'reload',
+    ] as const) {
+      const runtime = new AppRuntime({
+        management: store,
+        pipeline: testPipeline(),
+        onRestart() {},
+        settings: { viewerCooldownMs: 0, globalCooldownMs: 0 },
+      });
+      let finish!: (response: Response) => void;
+      let signal: AbortSignal | null | undefined;
+      let started!: () => void;
+      const dispatched = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      globalThis.fetch = async (_url, init) => {
+        signal = init?.signal;
+        started();
+        return new Promise<Response>((resolve) => {
+          finish = resolve;
+        });
+      };
+      runtime.session.poll('setup-source');
+      const cancelledBeforeSubmit = `departed-${action}`;
+      runtime.cancelObsTest({ eventId: cancelledBeforeSubmit });
+      assert.throws(
+        () => runtime.testObs({ voiceId: voice, eventId: cancelledBeforeSubmit }),
+        /cancelled/,
+      );
+      assert.equal(runtime.session.queue.snapshot().requests.length, 0);
+      const accepted = runtime.testObs({ voiceId: voice, eventId: `setup-${action}` });
+      await dispatched;
+      runtime.session.sweep();
+      assert.equal(runtime.session.queue.snapshot().activeId, accepted.requestId);
+      assert.equal(runtime.session.repliesRequested, false);
+      assert.equal(runtime.session.queue.snapshot().repliesEnabled, false);
+      assert.throws(
+        () => runtime.session.queue.submit('Viewer', 'Tyrone: Real question', 'viewer'),
+        /Replies are off/,
+      );
+      assert.throws(() => runtime.saveSettings('speech', { key: '', model: 'invalid' }));
+      assert.equal(signal?.aborted, false, 'Rejected settings keep the OBS test running.');
+      if (action === 'cancel') runtime.cancelObsTest({ requestId: accepted.requestId });
+      else if (action === 'cancel-event') {
+        runtime.cancelObsTest({ eventId: `setup-${action}` });
+        runtime.cancelObsTest({ eventId: `setup-${action}` });
+        assert.throws(
+          () => runtime.testObs({ voiceId: voice, eventId: `setup-${action}` }),
+          /cancelled/,
+        );
+      } else if (action === 'off' || action === 'on')
+        runtime.session.setRepliesEnabled(action === 'on');
+      else if (action === 'disconnect') runtime.session.release('setup-source');
+      else if (action === 'restart') runtime.restart(true);
+      else if (action === 'generation')
+        runtime.saveSettings('generation', {
+          provider: 'openrouter',
+          key: 'dummy-generation-key',
+          model: 'test/model',
+          maxTokens: 1024,
+        });
+      else if (action === 'speech') runtime.saveSettings('speech', { key: '', model: 's2.1-pro' });
+      else if (action === 'character')
+        runtime.saveCharacter('tyrone', { prompt: 'Updated prompt', voiceId: voice });
+      else if (action === 'reload') runtime.refreshProfiles();
+      else runtime[action]();
+      assert(signal?.aborted, `${action} aborts speech.`);
+      finish(new Response(audio));
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(runtime.session.queue.snapshot().activeId, null);
+      assert.equal(runtime.session.state.clip, null);
+      assert.equal(runtime.session.queue.snapshot().requests[0]?.status, 'skipped');
+      runtime.close();
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('HTTP speech test returns private bounded MP3 and OBS test uses fixed queue pipeline', async () => {
   const originalFetch = globalThis.fetch;
   const dir = await mkdtemp(join(tmpdir(), 'momoitts-test-http-'));
@@ -288,12 +397,31 @@ test('HTTP speech test returns private bounded MP3 and OBS test uses fixed queue
     const body = { voiceId: voice, eventId: 'obs-one' };
     assert.match((await (await post('/api/test/obs', body)).json()).error, /Connect the OBS/);
     runtime.session.poll('12345678-1234-1234-1234-123456789012');
-    assert.match((await (await post('/api/test/obs', body)).json()).error, /Turn replies on/);
-    runtime.session.setRepliesEnabled(true);
+    assert.equal((await post('/api/test/obs/cancel', { eventId: '../invalid' })).status, 409);
+    assert.equal(
+      (await post('/api/test/obs/cancel', { eventId: 'departed-before-submit' })).status,
+      200,
+    );
+    assert.match(
+      (
+        await (
+          await post('/api/test/obs', { voiceId: voice, eventId: 'departed-before-submit' })
+        ).json()
+      ).error,
+      /cancelled/,
+    );
+    assert.equal(calls, 1, 'A departed setup page cannot dispatch speech after cancellation.');
     const obs = await (await post('/api/test/obs', body)).json();
     assert.equal(typeof obs.requestId, 'string');
     assert.equal(obs.management.localReady, false);
+    assert.equal(obs.repliesRequested, false);
+    assert.equal(obs.queue.repliesEnabled, false);
+    assert.throws(
+      () => runtime.session.queue.submit('Viewer', 'Tyrone: Question', 'viewer-during-setup'),
+      /unavailable|Replies are off/,
+    );
     await new Promise((resolve) => setTimeout(resolve, 10));
+    runtime.session.sweep();
     assert.equal(submittedText, 'This is the MomoiTTS OBS output test.');
     assert.equal(runtime.snapshot().queue?.requests[0]?.status, 'ready');
     const recovered = await (
@@ -326,20 +454,38 @@ test('HTTP speech test returns private bounded MP3 and OBS test uses fixed queue
       'An accepted cancelled test can be recovered while replies are off without replay.',
     );
     assert.equal(calls, 2);
+    runtime.saveSettings('application', { setupSeen: true });
+    assert.equal(
+      (await (await post('/api/test/obs', body)).json()).requestId,
+      obs.requestId,
+      'Unrelated application writes preserve idempotent OBS test recovery.',
+    );
+    runtime.saveSettings('speech', { key: '', model: 's2.1-pro' });
+    const staleProof = await post('/api/test/obs', body);
+    assert.equal(staleProof.status, 409);
+    assert.match((await staleProof.json()).error, /Settings changed/);
+    assert.equal(calls, 2, 'Stale test recovery cannot dispatch speech or certify new settings.');
     runtime.session.setRepliesEnabled(true);
+    runtime.session.queue.setPipeline(testPipeline());
     const nextRequest = runtime.session.queue.submit(
       'New viewer',
       'Tyrone: Newer work',
       'new-viewer-after-obs',
-      testPipeline(),
     );
     assert.equal((await post('/api/test/obs/cancel', { requestId: obs.requestId })).status, 200);
+    assert.equal((await post('/api/test/obs/cancel', { eventId: body.eventId })).status, 200);
     assert.equal(
       runtime.snapshot().queue?.activeId,
       nextRequest,
       'Stale OBS cancellation leaves newer viewer work intact.',
     );
     runtime.session.queue.skip();
+    assert.match(
+      (await (await post('/api/test/obs', { voiceId: voice, eventId: 'live-obs-test' })).json())
+        .error,
+      /Turn replies off/,
+    );
+    runtime.session.setRepliesEnabled(false);
     const collided = await post('/api/test/obs', {
       voiceId: voice,
       eventId: 'new-viewer-after-obs',

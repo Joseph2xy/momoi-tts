@@ -61,7 +61,7 @@ function TestDialog({
 }
 
 // Provider tests stay out of the operation queue. Each request is bounded and canceled on departure.
-function usePreviewTask(onResult?: ResultFeedback['onResult']) {
+function usePreviewTask(unavailable: string, onResult?: ResultFeedback['onResult']) {
   const report = useRef(onResult);
   report.current = onResult;
   const active = useRef<AbortController | null>(null);
@@ -79,6 +79,9 @@ function usePreviewTask(onResult?: ResultFeedback['onResult']) {
       window.removeEventListener('pagehide', leave);
     };
   }, []);
+  useEffect(() => {
+    if (unavailable) active.current?.abort();
+  }, [unavailable]);
   async function run<T>(
     route: string,
     body: unknown,
@@ -128,9 +131,9 @@ function availabilityMessage(value: Availability, provider: string) {
   return !value.connected
     ? 'Start or reconnect to MomoiTTS to test.'
     : value.dirty
-      ? 'Save your changes before testing.'
+      ? 'Close this test and save your changes before testing.'
       : !value.ready
-        ? `Save your ${provider} settings before testing.`
+        ? `Close this test, complete your ${provider} settings and save them before testing.`
         : value.blocked
           ? 'Wait for the current action to finish.'
           : '';
@@ -145,7 +148,7 @@ export function GenerationTest(
   return (
     <TestDialog
       title="Test generation"
-      description="Text only; no speech or OBS needed. Uses your saved provider’s allowance and may incur charges."
+      description="Generate a text reply with your saved model. Uses provider allowance; charges may apply."
     >
       <GenerationPreview {...props} />
     </TestDialog>
@@ -155,8 +158,8 @@ function GenerationPreview(props: Availability & ResultFeedback & { characters: 
   const [text, setText] = useState('');
   const [character, setCharacter] = useState('');
   const [dialogue, setDialogue] = useState('');
-  const task = usePreviewTask(props.onResult);
   const unavailable = availabilityMessage(props, 'generation');
+  const task = usePreviewTask(unavailable, props.onResult);
   async function generate() {
     if (unavailable || !text.trim() || task.busy) return;
     setDialogue('');
@@ -173,7 +176,7 @@ function GenerationPreview(props: Availability & ResultFeedback & { characters: 
   return (
     <>
       <Field>
-        <FieldLabel htmlFor="generation-test-text">Message</FieldLabel>
+        <FieldLabel htmlFor="generation-test-text">Test question</FieldLabel>
         <Textarea
           id="generation-test-text"
           rows={3}
@@ -187,10 +190,11 @@ function GenerationPreview(props: Availability & ResultFeedback & { characters: 
             setDialogue('');
           }}
         />
+        <FieldDescription>Enter a question, then click Generate response below.</FieldDescription>
       </Field>
       <Field>
         <FieldLabel htmlFor="generation-test-character">
-          Character prompt{' '}
+          Character instructions{' '}
           <span className="text-sm font-normal text-muted-foreground">Optional</span>
         </FieldLabel>
         <Select
@@ -206,7 +210,7 @@ function GenerationPreview(props: Availability & ResultFeedback & { characters: 
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              <SelectItem value="none">No character prompt</SelectItem>
+              <SelectItem value="none">Without character instructions</SelectItem>
               {props.characters.map((item) => (
                 <SelectItem key={item.id} value={item.id}>
                   {item.name}
@@ -215,6 +219,10 @@ function GenerationPreview(props: Availability & ResultFeedback & { characters: 
             </SelectGroup>
           </SelectContent>
         </Select>
+        <FieldDescription>
+          Choose a character to check its saved instructions, or leave this unset to check only the
+          generation model.
+        </FieldDescription>
       </Field>
       <div className="flex flex-wrap items-center gap-2">
         <Button
@@ -332,7 +340,14 @@ function VoiceField({
             placeholder="Paste a Fish Audio voice ID"
             onChange={(event) => setVoiceId(event.target.value.trim())}
           />
-          <FieldDescription>32-character ID from Fish Audio.</FieldDescription>
+          <FieldDescription>
+            Open a voice on{' '}
+            <a href="https://fish.audio" target="_blank" rel="noopener noreferrer">
+              Fish Audio
+            </a>{' '}
+            and copy its model ID, or take the 32-character ID after /m/ in its address. Paste only
+            the ID, not the full address or your API key.
+          </FieldDescription>
         </>
       ) : (
         <FieldDescription>
@@ -348,7 +363,7 @@ export function SpeechTest(props: Availability & VoiceInput & ResultFeedback) {
   return (
     <TestDialog
       title="Test speech"
-      description="Listen in this browser; no generation or OBS needed. Uses Fish Audio allowance and may incur charges."
+      description="Listen to a Fish Audio phrase in this browser. Uses provider allowance; charges may apply."
     >
       <SpeechPreview {...props} />
     </TestDialog>
@@ -360,13 +375,16 @@ function SpeechPreview(props: Availability & VoiceInput & ResultFeedback) {
   const [playback, setPlayback] = useState('');
   const [playbackFailed, setPlaybackFailed] = useState(false);
   const audio = useRef<HTMLAudioElement>(null);
-  const task = usePreviewTask(props.onResult);
   const unavailable = availabilityMessage(props, 'speech');
+  const task = usePreviewTask(unavailable, props.onResult);
   useEffect(() => {
     setAudioUrl('');
     setPlayback('');
     setPlaybackFailed(false);
   }, [props.voiceId]);
+  useEffect(() => {
+    if (unavailable) audio.current?.pause();
+  }, [unavailable]);
   useEffect(() => {
     if (!audioUrl) return;
     const target = audio.current;
@@ -446,9 +464,11 @@ function SpeechPreview(props: Availability & VoiceInput & ResultFeedback) {
         message={
           unavailable ||
           task.message ||
-          (props.voiceId && !validVoice(props.voiceId)
-            ? 'Enter a valid voice ID to test speech.'
-            : '')
+          (!validVoice(props.voiceId)
+            ? 'Choose a character with a saved voice, or enter a 32-character Fish Audio voice ID.'
+            : !text.trim()
+              ? 'Enter a phrase for the voice to read aloud.'
+              : '')
         }
         failed={task.failed && !unavailable}
       />
@@ -487,12 +507,23 @@ export function ObsTest(
       blocked: boolean;
       dirty: boolean;
       connected: boolean;
+      inline?: boolean;
+      fixedVoice?: boolean;
     },
 ) {
+  if (props.inline)
+    return (
+      <>
+        <p className="text-sm text-muted-foreground">
+          The test uses Fish allowance; charges may apply.
+        </p>
+        <ObsPreview {...props} />
+      </>
+    );
   return (
     <TestDialog
       title="Test OBS output"
-      description="Uses Fish Audio allowance and may incur charges. Closing this window leaves the test running; use Cancel test to stop it."
+      description="Send a fixed phrase through OBS. Uses Fish allowance; charges may apply. Closing this dialog won't stop playback—use Cancel test."
     >
       <ObsPreview {...props} />
     </TestDialog>
@@ -507,6 +538,7 @@ function ObsPreview({
   requestId,
   setRequestId,
   submission,
+  fixedVoice,
   ...voice
 }: VoiceInput &
   ObsTracking & {
@@ -515,28 +547,82 @@ function ObsPreview({
     blocked: boolean;
     dirty: boolean;
     connected: boolean;
+    fixedVoice?: boolean;
   }) {
   const [message, setMessage] = useState('');
   const queue = state.queue;
+  const mounted = useRef(true);
+  const departures = useRef(0);
+  const canceledRequest = useRef('');
+  const submitting = useRef(false);
+  const departure = useRef({ requestId, unfinished: false });
+  departure.current = {
+    requestId,
+    unfinished: !!queue?.requests.some(
+      (item) =>
+        item.id === requestId &&
+        !['completed', 'failed', 'skipped', 'removed', 'expired'].includes(item.status),
+    ),
+  };
+  useEffect(() => {
+    mounted.current = true;
+    const leave = () => {
+      mounted.current = false;
+      departures.current++;
+      if (!fixedVoice) return;
+      const body = submission.current
+        ? { eventId: submission.current.eventId }
+        : departure.current.unfinished && canceledRequest.current !== departure.current.requestId
+          ? { requestId: departure.current.requestId }
+          : null;
+      if (body)
+        void fetch('/api/test/obs/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          keepalive: true,
+        }).catch(() => {});
+      if (body && typeof body.requestId === 'string') canceledRequest.current = body.requestId;
+      submission.current = null;
+    };
+    window.addEventListener('pagehide', leave);
+    const restore = () => {
+      mounted.current = true;
+    };
+    window.addEventListener('pageshow', restore);
+    return () => {
+      leave();
+      window.removeEventListener('pagehide', leave);
+      window.removeEventListener('pageshow', restore);
+    };
+  }, [fixedVoice, submission]);
   const entry = queue?.requests.find((item) => item.id === requestId);
   const unfinished =
     !!entry && !['completed', 'failed', 'skipped', 'removed', 'expired'].includes(entry.status);
   const unavailable = !connected
     ? 'Start or reconnect to MomoiTTS to test.'
     : dirty
-      ? 'Save your speech settings before testing.'
+      ? fixedVoice
+        ? 'Save your changes before testing.'
+        : 'Close this test and save your speech settings before testing.'
       : !state.management?.speech.ready
-        ? 'Save your speech settings before testing.'
+        ? 'Close this test, complete your speech settings and save them before testing.'
         : !state.playerConnected
-          ? 'Activate an audio source using the address above; use OBS for stream output.'
-          : !queue?.repliesEnabled
-            ? 'Turn replies on to test OBS output.'
+          ? fixedVoice
+            ? 'Add the Browser source above to connect OBS.'
+            : 'Close this test and follow Settings → OBS output to add the Browser source in OBS.'
+          : state.repliesRequested || queue?.repliesEnabled
+            ? 'Turn viewer replies off before testing OBS output.'
             : (queue?.activeId || queue?.waitingIds.length) && !unfinished && !submission.current
               ? 'Wait for queued replies to finish before testing OBS output.'
               : '';
   async function test() {
-    if (unavailable || blocked || unfinished || !validVoice(voice.voiceId)) return;
+    if (unavailable || blocked || unfinished || submitting.current || !validVoice(voice.voiceId))
+      return;
+    submitting.current = true;
+    const departureCount = departures.current;
     setMessage('');
+    setRequestId('');
     if (!submission.current || submission.current.voiceId !== voice.voiceId)
       submission.current = { voiceId: voice.voiceId, eventId: crypto.randomUUID() };
     try {
@@ -544,18 +630,33 @@ function ObsPreview({
         '/api/test/obs',
         submission.current,
       );
+      if (fixedVoice && (!mounted.current || departureCount !== departures.current)) {
+        void server
+          .command('/api/test/obs/cancel', { requestId: result.requestId })
+          .catch(() => {});
+        submission.current = null;
+        return;
+      }
       setRequestId(result.requestId);
       submission.current = null;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not test OBS output.');
+      if (mounted.current)
+        setMessage(error instanceof Error ? error.message : 'Could not test OBS output.');
+    } finally {
+      submitting.current = false;
     }
   }
   return (
     <>
-      <p className="text-sm leading-relaxed text-muted-foreground">
-        Listen in OBS monitoring or a recording to confirm stream output.
-      </p>
-      <VoiceField {...voice} disabled={blocked || unfinished} id="obs-test-voice" />
+      {fixedVoice ? null : (
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Listen through OBS monitoring and check a recording. Source connectivity alone doesn't
+          prove audibility.
+        </p>
+      )}
+      {fixedVoice ? null : (
+        <VoiceField {...voice} disabled={blocked || unfinished} id="obs-test-voice" />
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
@@ -564,20 +665,22 @@ function ObsPreview({
         >
           Send test phrase
         </Button>
-        {connected && !queue?.repliesEnabled ? (
+        {connected && (state.repliesRequested || queue?.repliesEnabled) ? (
           <Button
             type="button"
             variant="outline"
             disabled={blocked}
             onClick={() =>
               void server
-                .command('/api/replies/on', {})
+                .command('/api/replies/off', {})
                 .catch((error) =>
-                  setMessage(error instanceof Error ? error.message : 'Could not turn replies on.'),
+                  setMessage(
+                    error instanceof Error ? error.message : 'Could not turn replies off.',
+                  ),
                 )
             }
           >
-            Turn replies on
+            Turn replies off
           </Button>
         ) : null}
         {unfinished ? (
@@ -601,9 +704,11 @@ function ObsPreview({
         message={
           message ||
           unavailable ||
-          (voice.voiceId && !validVoice(voice.voiceId)
-            ? 'Enter a valid voice ID to test OBS output.'
-            : '')
+          (blocked && !unfinished
+            ? 'Wait for the current action to finish.'
+            : !validVoice(voice.voiceId)
+              ? 'Choose a character with a saved voice, or enter a 32-character Fish Audio voice ID.'
+              : '')
         }
         failed={!!message}
       />

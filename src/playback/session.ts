@@ -20,6 +20,10 @@ export class PlaybackSession {
   #owner: { session: string; seen: number } | null = null;
   #audio: Buffer | null = null;
   #clipStarted = 0;
+  #repliesRequested = false;
+  get repliesRequested() {
+    return this.#repliesRequested;
+  }
   constructor(options: {
     pipeline?: QueuePipeline;
     settings?: Partial<QueueSettings>;
@@ -50,6 +54,7 @@ export class PlaybackSession {
     return active.has(this.state.status);
   }
   setRepliesEnabled(enabled: boolean): void {
+    this.#repliesRequested = enabled;
     this.queue.setRepliesEnabled(enabled);
     if (!enabled) this.stop('Replies are off. Turn on to accept fresh requests.');
   }
@@ -66,7 +71,9 @@ export class PlaybackSession {
     if (this.#owner && Date.now() - this.#owner.seen > leaseMs) {
       this.#owner = null;
       this.state.playerConnected = false;
-      this.stop('Player disconnected. Replies are off; turn on when ready.');
+      this.stop(
+        'Player disconnected. Interrupted work is canceled; waiting for the source to return.',
+      );
       this.queue.disconnect();
     }
     if (this.busy && Date.now() - this.#clipStarted > 120_000) {
@@ -86,6 +93,8 @@ export class PlaybackSession {
     if (primary) {
       this.#owner.seen = Date.now();
       this.state.playerConnected = true;
+      if (this.#repliesRequested && !this.queue.snapshot().repliesEnabled)
+        this.queue.setRepliesEnabled(true);
       if (progress && progress.id === this.state.clip?.id && this.busy)
         this.state.progress = {
           elapsedSeconds: progress.elapsedSeconds,
@@ -105,7 +114,9 @@ export class PlaybackSession {
     if (!this.#owner || this.#owner.session !== session) return;
     this.#owner = null;
     this.state.playerConnected = false;
-    this.stop('Audio source closed or refreshed. Replies are off; turn on when ready.');
+    this.stop(
+      'Audio source closed or refreshed. Interrupted work is canceled; waiting for the source to return.',
+    );
     this.queue.disconnect();
   }
   playbackEvent(session: unknown, id: unknown, event: unknown): 'ok' | 'stale' | 'invalid' {

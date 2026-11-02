@@ -6,6 +6,7 @@ import type { QueuePipeline } from '../src/queue/contracts.ts';
 import { createAppServer } from '../src/app/server.ts';
 import type { PlaybackState } from '../src/shared/protocol.ts';
 import { SpeechFailure, OperationTimeoutError } from '../src/shared/errors.ts';
+import { test } from 'node:test';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -17,6 +18,147 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+test('trusted setup audio uses the same bounded queue without enabling viewer intake', async () => {
+  let clock = 0;
+  const speech = deferred<Buffer>();
+  const played: string[] = [];
+  const stopped: string[] = [];
+  const pipeline: QueuePipeline = {
+    characters: testCharacters,
+    mode: 'live',
+    async generate() {
+      return 'Setup audio';
+    },
+    async synthesize() {
+      return speech.promise;
+    },
+  };
+  const queue = new RequestQueue({
+    pipeline,
+    now: () => clock,
+    playerReady: () => true,
+    play: (id) => played.push(id),
+    stop: (id) => stopped.push(id),
+    settings: { viewerCooldownMs: 0, globalCooldownMs: 0 },
+  });
+  assert.throws(
+    () => queue.submitSetupTest('Setup', 'Tyrone: Test', 'setup-before-off', pipeline),
+    /Turn replies off/,
+  );
+  queue.setRepliesEnabled(false);
+  const id = queue.submitSetupTest('Setup', 'Tyrone: Test', 'setup', pipeline);
+  assert.equal(queue.submitSetupTest('Setup', 'Tyrone: Test', 'setup', pipeline), id);
+  assert.equal(queue.snapshot().repliesEnabled, false);
+  assert.throws(() => queue.submit('Viewer', 'Tyrone: Question', 'viewer'), /Replies are off/);
+  assert.throws(
+    () => queue.submitSetupTest('Setup', 'Tyrone: Test', 'setup-second', pipeline),
+    /Finish or clear/,
+  );
+  await flush();
+  clock = 180_001;
+  queue.tick();
+  assert.equal(queue.snapshot().requests[0]?.status, 'failed');
+  assert.equal(queue.snapshot().requests[0]?.error, 'Request timed out.');
+  assert.deepEqual(stopped, [id]);
+  speech.resolve(Buffer.from('ID3late'));
+  await flush();
+  assert.deepEqual(played, []);
+  assert.equal(queue.snapshot().activeId, null);
+  assert.equal(queue.snapshot().repliesEnabled, false);
+});
+
+test('setup retries do not consume or reset viewer cooldowns', async () => {
+  let clock = 0;
+  const pipeline: QueuePipeline = {
+    characters: testCharacters,
+    mode: 'live',
+    async generate() {
+      return 'Test reply';
+    },
+    async synthesize() {
+      return Buffer.from('ID3fixture');
+    },
+  };
+  const queue = new RequestQueue({
+    pipeline,
+    now: () => clock,
+    playerReady: () => true,
+    play() {},
+    stop() {},
+  });
+  queue.submit('Original viewer', 'Tyrone: Question', 'live-before-setup');
+  queue.setRepliesEnabled(false);
+  clock = 500;
+  const cancelled = queue.submitSetupTest('Setup', 'Tyrone: Test', 'setup-cancelled', pipeline);
+  queue.cancel(cancelled);
+  const completed = queue.submitSetupTest('Setup', 'Tyrone: Test', 'setup-completed', pipeline);
+  await flush();
+  queue.playbackEvent(completed, 'playing');
+  queue.playbackEvent(completed, 'ended');
+  assert.equal(
+    queue.snapshot().requests.find((entry) => entry.id === completed)?.status,
+    'completed',
+  );
+  const repeated = queue.submitSetupTest('Setup', 'Tyrone: Test', 'setup-repeated', pipeline);
+  queue.cancel(repeated);
+  queue.setRepliesEnabled(true);
+  assert.throws(() => queue.submit('New viewer', 'Tyrone: Question', 'too-soon'), /Cooldown/);
+  clock = 1001;
+  const live = queue.submit('New viewer', 'Tyrone: Question', 'live-after-setup');
+  queue.cancel(live);
+  clock = 2002;
+  assert.throws(
+    () => queue.submit('Original viewer', 'Tyrone: Question', 'viewer-still-cooling'),
+    /Cooldown/,
+  );
+  clock = 10000;
+  const returning = queue.submit('Original viewer', 'Tyrone: Question', 'viewer-after-cooldown');
+  queue.cancel(returning);
+  await flush();
+});
+
+test('waiting work for a disabled character fails without generation or speech, then advances', async () => {
+  let ready = false;
+  const generated: string[] = [];
+  const played: string[] = [];
+  let speechCalls = 0;
+  const pipeline: QueuePipeline = {
+    characters: [...testCharacters, { ...testCharacters[0]!, id: 'momoi', name: 'Momoi' }],
+    mode: 'live',
+    async generate(question) {
+      generated.push(question);
+      return 'Reply';
+    },
+    async synthesize() {
+      speechCalls++;
+      return Buffer.from('ID3fixture');
+    },
+  };
+  const queue = new RequestQueue({
+    pipeline,
+    playerReady: () => ready,
+    play: (id) => played.push(id),
+    stop() {},
+    settings: { viewerCooldownMs: 0, globalCooldownMs: 0 },
+  });
+  const disabled = queue.submit('One', 'Tyrone: Disabled request', 'disabled-character');
+  const next = queue.submit('Two', 'Momoi: Available request', 'available-character');
+  queue.setPipeline({
+    ...pipeline,
+    characters: pipeline.characters.filter((character) => character.name !== 'Tyrone'),
+  });
+  ready = true;
+  queue.tick();
+  await flush();
+  const failed = queue.snapshot().requests.find((entry) => entry.id === disabled);
+  assert.equal(failed?.status, 'failed');
+  assert.equal(failed?.error, 'Selected character is no longer available.');
+  assert.deepEqual(generated, ['Available request']);
+  assert.equal(speechCalls, 1);
+  assert.deepEqual(played, [next]);
+  queue.setRepliesEnabled(false);
+});
 
 // Integration completion callbacks can synchronously cancel other requests.
 // Detach terminal jobs before notifying so every request finishes exactly once.

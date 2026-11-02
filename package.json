@@ -13,8 +13,6 @@
     "dev:browser": "vite build --watch",
     "dev:server": "node --watch src/app/main.ts",
     "start": "node scripts/launch/run.ts",
-    "twitch:login": "node --env-file=.local/twitch.env scripts/twitch/login.ts",
-    "twitch:reward": "node --env-file=.local/twitch.env scripts/twitch/reward.ts",
     "pretest": "npm run build:browser",
     "test": "node --test tests/*.test.ts",
     "test:offline": "npm test",
@@ -50,6 +48,7 @@
     "tailwind-merge": "^3.7.0"
   },
   "prettier": {
+    "endOfLine": "auto",
     "singleQuote": true,
     "printWidth": 100
   }

@@ -89,6 +89,37 @@ test('character editor privately persists bounded existing profiles without poll
   }
 });
 
+test('voice-only setup saves preserve the latest instructions and reject invalid mutations', async () => {
+  const f = await fixture();
+  try {
+    const earlier = f.store.characterEditor('alpha');
+    f.store.saveCharacter('alpha', {
+      prompt: 'Latest saved personality.',
+      voiceId: voiceA,
+      available: false,
+    });
+    f.store.saveCharacter('alpha', { voiceId: voiceB, available: true });
+    const saved = f.store.characterEditor('alpha');
+    assert.notEqual(saved.prompt, earlier.prompt);
+    assert.equal(saved.prompt, 'Latest saved personality.');
+    assert.equal(saved.voiceId, voiceB);
+    assert.equal(saved.available, true);
+    const before = await readFile(join(f.root, 'characters.json'), 'utf8');
+    for (const body of [
+      { available: true },
+      { voiceId: 'bad', available: true },
+      { voiceId: '', available: true },
+      { voiceId: voiceC, path: '../generation.env' },
+    ])
+      assert.throws(() => f.store.saveCharacter('alpha', body));
+    assert.equal(await readFile(join(f.root, 'characters.json'), 'utf8'), before);
+    const reopened = new SettingsStore({ privateRoot: f.root, catalog: f.catalog, env: {} });
+    assert.deepEqual(reopened.characterEditor('alpha'), saved);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
+
 test('environment voices take precedence without replacing saved fallback and failed writes preserve effective edits', async () => {
   const f = await fixture();
   try {
@@ -113,11 +144,13 @@ test('environment voices take precedence without replacing saved fallback and fa
     await rm(join(f.root, 'characters.json'));
     await mkdir(join(f.root, 'characters.json'));
     const before = fallback.characterEditor('alpha');
+    const testsBeforeFailedWrite = fallback.snapshot().testRevision;
     assert.throws(
       () => fallback.saveCharacter('alpha', { prompt: 'Failed write', voiceId: voiceA }),
       /Previous settings were kept/u,
     );
     assert.deepEqual(fallback.characterEditor('alpha'), before);
+    assert.equal(fallback.snapshot().testRevision, testsBeforeFailedWrite);
     assert.equal(fallback.snapshot().localReady, true);
   } finally {
     await rm(f.root, { recursive: true, force: true });

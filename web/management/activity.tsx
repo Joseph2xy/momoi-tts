@@ -214,7 +214,7 @@ function Entry({
 function readinessReason(state: PlaybackState | null): string | null {
   if (!state) return null;
   if (state.management && !state.management.localReady)
-    return 'Complete generation, speech and character voice setup in Settings before turning replies on.';
+    return 'Complete Generation and Speech in Settings, then assign a voice and enable a character in Characters before turning replies on.';
   if (!state.playerConnected)
     return 'Connect the OBS audio source in Settings before turning replies on.';
   return null;
@@ -224,6 +224,7 @@ function Controls({ state, connected, pending, command }: Props) {
   const [draftVolume, setDraftVolume] = useState<number | null>(null);
   const committing = useRef(false);
   const disabled = !connected || pending || !state;
+  const repliesOn = state?.repliesRequested ?? state?.queue?.repliesEnabled ?? false;
   const current = state?.queue?.activeId;
   const enableBlocked = readinessReason(state);
   const run = (route: string, body = {}) => void command(route, body).catch(() => {});
@@ -245,18 +246,14 @@ function Controls({ state, connected, pending, command }: Props) {
     <div className="flex w-full flex-wrap items-center gap-2">
       <Button
         id="replies-toggle"
-        variant={state?.queue?.repliesEnabled ? 'outline' : 'default'}
-        disabled={disabled || !state?.queue || (!state.queue.repliesEnabled && !!enableBlocked)}
+        variant={repliesOn ? 'outline' : 'default'}
+        disabled={disabled || !state?.queue || (!repliesOn && !!enableBlocked)}
         aria-describedby={enableBlocked ? 'replies-readiness' : undefined}
-        aria-pressed={state?.queue?.repliesEnabled ?? false}
-        onClick={() => run(state?.queue?.repliesEnabled ? '/api/replies/off' : '/api/replies/on')}
+        aria-pressed={repliesOn ?? false}
+        onClick={() => run(repliesOn ? '/api/replies/off' : '/api/replies/on')}
       >
-        {state?.queue?.repliesEnabled ? (
-          <Square data-icon="inline-start" />
-        ) : (
-          <Play data-icon="inline-start" />
-        )}
-        {state?.queue?.repliesEnabled ? 'Turn replies off' : 'Turn replies on'}
+        {repliesOn ? <Square data-icon="inline-start" /> : <Play data-icon="inline-start" />}
+        {repliesOn ? 'Turn replies off' : 'Turn replies on'}
       </Button>
       <Button
         id="skip"
@@ -358,7 +355,9 @@ export function Activity(props: Props) {
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 md:px-8 md:py-10">
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Activity</h1>
-        <p className="text-muted-foreground">The conversation behind your stream.</p>
+        <p className="text-muted-foreground">
+          Follow viewer questions, spoken replies and the queue.
+        </p>
       </header>
       {props.notice}
       <Card className="min-w-0 gap-0 overflow-hidden pb-0">
@@ -369,8 +368,8 @@ export function Activity(props: Props) {
           </CardTitle>
           <CardDescription>
             {current
-              ? 'A viewer asks. Your character takes the mic.'
-              : 'Ready when your viewers are.'}
+              ? 'The current question and its reply appear here.'
+              : 'Questions appear here when a viewer redeems your Twitch reward.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid min-w-0 gap-6 pb-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
@@ -408,7 +407,7 @@ export function Activity(props: Props) {
                       : readiness
                         ? readiness
                         : !queue?.repliesEnabled
-                          ? 'Turn replies on when you’re ready. New requests while off are refunded.'
+                          ? 'Turn replies on when you’re ready. New requests while off are canceled for a Channel Points refund.'
                           : 'The next viewer question will appear here.'}
                   </EmptyDescription>
                 </EmptyHeader>
@@ -550,6 +549,11 @@ export function Activity(props: Props) {
                 }
               />
               <div className="flex min-h-0 flex-col gap-6 overflow-y-auto overscroll-contain">
+                {selected.status === 'completed' ? (
+                  <p className="text-sm text-muted-foreground">
+                    The audio source finished playback. Confirm stream audibility in OBS separately.
+                  </p>
+                ) : null}
                 <section className="flex flex-col gap-2">
                   <h2 className="text-sm font-medium text-muted-foreground">Question</h2>
                   <p className="whitespace-pre-wrap break-words text-base leading-relaxed">

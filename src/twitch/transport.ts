@@ -46,6 +46,15 @@ export function twurpleTransport(file = tokenFile): TwitchTransportFactory {
     };
     return {
       stop,
+      async pauseReward(reward, paused, prompt) {
+        if (stopped || !api) throw new Error('Twitch disconnected.');
+        await api.asUser(broadcasterId, (client) =>
+          client.channelPoints.updateCustomReward(broadcasterId, reward, {
+            isPaused: paused,
+            ...(prompt ? { prompt } : {}),
+          }),
+        );
+      },
       async isLive() {
         if (stopped || !api) throw new Error('Twitch disconnected.');
         const revision = streamRevision;
@@ -122,7 +131,10 @@ export function twurpleTransport(file = tokenFile): TwitchTransportFactory {
         const auth = new RefreshingAuthProvider({ clientId: config.clientId });
         auth.onRefresh((userId, token) => {
           if (stopped) return;
-          writes = writes.then(() => saveToken({ clientId: config.clientId, userId, token }, file));
+          writes = writes.then(async () => {
+            if (stopped) return;
+            await saveToken({ clientId: config.clientId, userId, token }, file, signal);
+          });
           void writes.catch(failed);
         });
         auth.onRefreshFailure(failed);

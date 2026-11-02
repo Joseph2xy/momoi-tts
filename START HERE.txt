@@ -1,22 +1,18 @@
 MOMOITTS - START HERE
 
-1. Extract the entire ZIP into a writable folder. Keep all files together.
-2. Double-click Setup MomoiTTS.cmd. Follow prerequisite prompts, reopening the
-   shortcut after Node installation if needed. Initial setup needs internet.
-3. The browser opens management. Save your OpenRouter API key and exact model ID.
-   Save your Fish key and review character instructions
-   and voices. See README.md.
-4. Use Settings to test generation and preview speech independently. Then set up
-   the OBS audio source and use OBS output > Test OBS output to check routing.
-5. Follow README.md for Twitch authorization/reward setup.
+1. Extract the entire ZIP into a writable folder and keep its files together.
+2. Double-click Launch MomoiTTS.cmd. Runtime/dependencies are included.
+3. Follow Finish setup to hear one character, test OBS with replies off,
+   then create your paused Channel Points reward. See README.md for details.
+4. Go live and click Turn replies on. Viewers redeem with Name: question.
 
-For everyday use, Launch MomoiTTS.cmd starts the app in the background.
-Open http://127.0.0.1:3210/ for controls. Replies start off; click Turn replies on.
+Everyday use: Launch opens controls; turn replies on when ready.
+Closing the browser tab leaves the app running. Exit MomoiTTS stops it.
+Temporary disconnections recover fresh intake without replaying interrupted work.
+Update MomoiTTS.cmd applies a downloaded release while preserving private data.
 
-This is the real app. No demo mode or sample audio is included.
-Saving settings does not call providers; explicit tests and normal replies use
-account allowance and may incur charges for the models you choose.
-Tyrone is one character. Edit character instructions and voices in Characters.
-Speech defaults to S2.1 Pro Free; alternative engines are in the Speech configuration form. Set volume in OBS.
-
+Saving settings never calls generation or speech. Explicit tests and normal
+replies use account allowance and may incur charges for your selected models.
 No credentials or accounts are included. Never share your .local folder.
+If Twitch setup says the app registration is unavailable, ask the maintainer
+for a configured release. Do not create your own Twitch app registration.

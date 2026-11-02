@@ -7,5 +7,5 @@
     "rootDir": ".",
     "outDir": ".generated/product-build"
   },
-  "include": ["src/**/*.ts", "scripts/launch/**/*.ts", "scripts/twitch/**/*.ts"]
+  "include": ["src/**/*.ts", "scripts/launch/**/*.ts"]
 }

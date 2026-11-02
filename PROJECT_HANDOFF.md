@@ -1,29 +1,23 @@
 # Project handoff
 
-Updated: 2026-10-12.
+Updated: 2026-10-19.
 
-## Product and agreed scope
+## Current status
 
-MomoiTTS is a local Windows multi-character Channel Points question-to-speech app with audio-only OBS output, automatic replies when enabled and durable private Q/A logging. Generation and hosted speech remain independent. No new event types, microphone/vision, avatars, autonomous commentary, local models, per-reply approval or additional filtering are agreed.
+The approved guided setup and offline cleanup are implemented. Character list/editor presentation is simplified, with compact status rows and voice/availability above bounded instructions. Setup uses shared provider/voice fields, with Tyrone as the starter and prompt editing outside setup, private reply/audio checks with viewer intake off, explicit paused reward creation and deliberate entry to Activity. The current review fixed stale test confirmation, reward-edit resets, cross-client cancellation and viewer cooldown interference. [README](README.md) owns usage, [architecture](docs/architecture.md) owns boundaries, [verification](docs/verification.md) owns source/package evidence, and [audit](docs/audit.md) owns remaining gaps.
 
-Distribution is a prebuilt ZIP with Setup/Launch shortcuts and a user guide. Assisted Node/runtime dependency installation and terminal/device-code Twitch setup are acceptable. The user is not a streamer and will not configure accounts for development validation; use offline fixtures and the existing limited user-reported OBS evidence. Private configuration, credentials, logs and recovery state must be preserved.
+The current empty recipient preview runs at http://127.0.0.1:62636/ in .generated/recipient-preview-guided/MomoiTTS. Superseded preview binaries are removed; their private/recovery state remains in place. Credentials, private settings, account caches and transfer/recovery state are preserved. No provider usage, account actions or live Twitch/OBS changes occurred. The working tree includes prior milestone changes; no commit/publication was requested.
 
-## Current state
+## Scope and provisional choices
 
-The architecture, runtime, providers/integrations, browser UI, dependencies, build/package flow and documentation have been reviewed. Failure-path fixes, backend preview cancellation, Radix style compatibility, polling optimization and unused UI/test-fixture cleanup are implemented. Generation is OpenRouter-only; the CLI adapter, prerequisite actions and unused dispatcher are removed. All 25 offline tests, build/typecheck, formatting and archive checks pass. [Audit](docs/audit.md) owns conclusions and product recommendations; [README](README.md) owns use/configuration, [architecture](docs/architecture.md) owns boundaries and [verification](docs/verification.md) owns checks and release evidence.
+The goal remains named-character questions through one shared required-text Channel Points reward, automatic spoken replies when enabled and private durable Q/A records. Generation and hosted speech stay independently replaceable. Additional events, microphone/vision, avatars, autonomous commentary, local models, per-reply approval, chat replies and extra filtering are not agreed.
 
-Replies start off. Turning off cancels current/waiting work; late results cannot play. Source loss leaves replies off. Twitch cancels unplayed work for refund and reconnects without replay. Setup/Settings have focused topic pages and independent generation, browser speech and queued OBS checks. Characters supports private prompt/voice editing; catalog add/remove/rename remains file-based.
+OpenRouter is explicit with no fallback or settled generation model. Fish S2.1 Pro Free defaults only without a saved/inherited engine. Persona/voice quality and allowance remain unevaluated; the prior paid Fish HTTP 402/API balance is unresolved. README owns provider terms/billing. Shared Public Twitch registration is supplied in config/twitch-app.json; private development Twitch configuration remains invalid and unchanged.
 
-Fish S2.1 Pro Free is the default only when no engine is saved or inherited. Recipient-selected OpenRouter models can be free or paid, with explicit model IDs and no fallback. Saving/startup makes no inference request. Local speech is saved as s2.1-pro-free; one previously authorized short request succeeded. Further trials, account actions, spending and OBS/Twitch changes are not authorized by this handoff.
+## Unresolved work
 
-The standalone app is the selected product direction, with development consolidated on `main` and no parallel product branches. Its public ZIP and evidence are recorded in verification. Guided Twitch setup is the next milestone under discussion; design the complete streamer setup and operation flow before implementation. The agreed viewer flow is one Channel Points reward for all characters, with required input such as `Tyrone: your question`. Viewers redeem inside Twitch without installing or signing into MomoiTTS; the streamer authorizes their channel.
-
-## Unresolved decisions and validation
-
-- Discuss moving Twitch authorization and explicit reward creation into the local interface, alongside provider/character setup and OBS verification. One MomoiTTS-owned public Twitch app registration and streamer-editable reward name/price are recommendations, not settled requirements. Registration ownership, reward controls and setup sequencing remain open. Current terminal/device-code helpers remain implemented; no new setup implementation or account actions are authorized by the discussion.
-- The user chose to record character catalog add/remove/rename as a follow-up, not implement it during this audit. Other product gaps and proposed simplifications are in the audit.
-- Validate install/configure/connect/redeem/hear/recover with a willing receiving streamer before describing the product as semi-ready. Real provider quality/latency, OBS routing and Twitch outcomes remain unestablished by offline tests.
-- No final generation model, persona/voice evaluation or allowance guarantee is settled. The earlier paid Fish HTTP 402 and API balance remain unresolved. README owns the time-limited free offer and billing distinctions.
-- Private Twitch client/channel settings remain invalid and preserved. Choose the actual broadcaster/client ID, reward title/cost, live window and redemption budget before authorized account actions.
-
-Private .local state and the transfer folder's recovery state are retained. Old TYRONE_* application environment names are unsupported; retained development generation settings may need explicit reselection under MOMOI_TTS_* before use. Temporary credentials must be replaced before recipient distribution. Repository naming remains provisional (private Joseph2xy/placeholder).
+- The October 19 recipient ZIP smoke test and all 45 offline tests passed within the limits in [verification](docs/verification.md). Its test service is stopped; `.generated/recipient-test-20261019` retains dummy settings because automatic approval review blocked cleanup. Browser automation dropped before the remaining screen walkthrough; no connected trial occurred.
+- Choose a receiving broadcaster, provider access/models/allowance, one character/voice, reward settings and a bounded live trial budget. Discuss consequential choices separately; the [trial runbook](docs/streamer-trial.md) requires explicit authorization for connected actions.
+- Validate real installation, authorization, redemption/audio, fulfillment/refunds and recovery on the receiving PC. Offline evidence does not establish provider quality, Twitch outcomes, OBS tracks or alert overlap.
+- Normal updater dialogs and current narrow-screen/full visual review remain unverified.
+- Browser catalog add/remove/rename is a recorded follow-up; dialogue retention/review policy is undecided.

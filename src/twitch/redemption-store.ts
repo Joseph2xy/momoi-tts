@@ -1,5 +1,6 @@
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { replacePrivateFile } from './persistence.ts';
 
 export type RedemptionTarget = 'FULFILLED' | 'CANCELED';
 export interface PendingRedemption {
@@ -53,8 +54,11 @@ export function fileRedemptionStore(
       await mkdir(new URL('./', file), { recursive: true });
       const temporary = new URL(`${file.href}.${randomUUID()}.tmp`);
       try {
-        await writeFile(temporary, JSON.stringify({ owner, entries }), { mode: 0o600 });
-        await rename(temporary, file);
+        await writeFile(temporary, JSON.stringify({ owner, entries }), {
+          mode: 0o600,
+          flush: true,
+        });
+        await replacePrivateFile(temporary, file);
       } finally {
         await rm(temporary, { force: true });
       }

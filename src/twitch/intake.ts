@@ -34,6 +34,7 @@ export interface TwitchTransport {
   settle(rewardId: string, id: string, target: RedemptionTarget): Promise<string>;
   outstanding(rewardId: string): Promise<{ id: string; rewardId: string }[]>;
   isLive(): Promise<boolean>;
+  pauseReward?(rewardId: string, paused: boolean, prompt?: string): Promise<void>;
 }
 export type TwitchTransportFactory = (
   config: TwitchConfig,
@@ -63,6 +64,15 @@ export class TwitchIntake {
   #scheduled = 0;
   #retry?: ReturnType<typeof setInterval>;
   #liveSince = Infinity;
+  #available = false;
+  #pauseApplied: boolean | undefined;
+  #pausing = false;
+  #pauseWork?: Promise<void>;
+  #prompt?: string;
+  #promptApplied?: string;
+  #pauseRetryAt = 0;
+  #onStreamEnd?: () => void;
+  #wasLive = false;
   #onRecord: ((event: RedemptionEvent, reason?: string) => void) | undefined;
   constructor(
     config: TwitchConfig | undefined,
@@ -70,12 +80,14 @@ export class TwitchIntake {
     factory: TwitchTransportFactory,
     store: RedemptionStore = fileRedemptionStore(),
     onRecord?: (event: RedemptionEvent, reason?: string) => void,
+    onStreamEnd?: () => void,
   ) {
     this.#config = config;
     this.#queue = queue;
     this.#factory = factory;
     this.#store = store;
     this.#onRecord = onRecord;
+    this.#onStreamEnd = onStreamEnd;
     this.#state = {
       status: config ? 'disconnected' : 'disabled',
       channel: config?.channel ?? null,
@@ -108,6 +120,92 @@ export class TwitchIntake {
       ...this.#state,
       pendingUpdates: [...this.#pending.keys()].filter((id) => !this.#requests.has(id)).length,
     };
+  }
+  reconfigure(config: TwitchConfig | undefined): void {
+    if (
+      this.#pending.size &&
+      (config?.clientId !== this.#config?.clientId || config?.channel !== this.#config?.channel)
+    )
+      throw new RequestInputError(
+        'Settle pending refunds with the current account before changing channels.',
+      );
+    this.disconnect();
+    if (config?.clientId !== this.#config?.clientId || config?.channel !== this.#config?.channel) {
+      this.#loaded = false;
+      this.#seen.clear();
+      this.#resolved.clear();
+    }
+    this.#config = config;
+    this.#state.channel = config?.channel ?? null;
+    this.#state.rewardTitle = config?.rewardTitle ?? 'Ask a character';
+    this.#state.status = config ? 'disconnected' : 'disabled';
+  }
+  setAvailable(available: boolean): void {
+    this.#available = available;
+    void this.#syncPause();
+  }
+  setPrompt(prompt: string): void {
+    this.#prompt = prompt;
+  }
+  async #syncPause(): Promise<void> {
+    if (this.#pauseWork) return this.#pauseWork;
+    const connection = this.#connection;
+    if (
+      !connection?.rewardId ||
+      !connection.transport.pauseReward ||
+      this.#pausing ||
+      Date.now() < this.#pauseRetryAt
+    )
+      return;
+    const paused =
+      !this.#available || this.#state.status !== 'connected' || this.#state.live !== true;
+    const prompt = this.#prompt;
+    if (this.#pauseApplied === paused && this.#promptApplied === prompt) return;
+    this.#pausing = true;
+    this.#pauseWork = connection.transport
+      .pauseReward(connection.rewardId, paused, prompt)
+      .then(() => {
+        if (connection === this.#connection) {
+          this.#pauseApplied = paused;
+          this.#promptApplied = prompt;
+        }
+      })
+      .catch(() => {
+        if (connection !== this.#connection) return;
+        this.#pauseRetryAt = Date.now() + 5000;
+        this.#state.message = 'Reward availability could not be confirmed. Twitch will be retried.';
+      })
+      .finally(() => {
+        this.#pausing = false;
+        this.#pauseWork = undefined;
+      });
+    await this.#pauseWork;
+    // Readiness, stream state, prompt or connection may change during the PATCH.
+    // Serialize a fresh comparison so a late unpause cannot remain authoritative.
+    void this.#syncPause();
+  }
+  async shutdown(): Promise<void> {
+    this.#available = false;
+    this.#pauseRetryAt = 0;
+    this.#queue.setRepliesEnabled(false);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.allSettled([
+          (async () => {
+            await this.#syncPause();
+            await this.#syncPause();
+          })(),
+          this.#work.then(() => this.#flush()),
+        ]),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, 3000);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    this.disconnect();
   }
   #schedule(operation: () => Promise<void>, controller?: AbortController, revision?: number): void {
     if (this.#scheduled >= 256) {
@@ -174,6 +272,8 @@ export class TwitchIntake {
             if (ready()) {
               this.#state.status = 'connected';
               this.#state.message = 'Listening for channel-point messages.';
+              this.#pauseApplied = undefined;
+              void this.#syncPause();
             }
           },
           controller,
@@ -189,6 +289,7 @@ export class TwitchIntake {
           // Cancel work during a gap: a missed moderator rejection must never play later.
           this.#state.status = 'reconnecting';
           this.#state.live = null;
+          this.#pauseApplied = undefined;
           this.#liveSince = Infinity;
           this.#state.message = 'Twitch disconnected; reconnecting…';
           for (const requestId of [...this.#requests.values()]) this.#queue.cancel(requestId);
@@ -248,6 +349,8 @@ export class TwitchIntake {
   disconnect(): void {
     const previous = this.#connection;
     this.#connection = null;
+    this.#pauseApplied = undefined;
+    this.#pauseRetryAt = 0;
     if (this.#retry) clearInterval(this.#retry);
     this.#retry = undefined;
     previous?.controller.abort();
@@ -261,12 +364,16 @@ export class TwitchIntake {
       : 'Twitch setup is pending.';
   }
   #setLive(live: boolean): void {
+    const ended = !live && this.#wasLive;
+    this.#wasLive = live;
     if (live && this.#state.live !== true) this.#liveSince = Date.now();
     if (!live) {
       this.#liveSince = Infinity;
       for (const requestId of [...this.#requests.values()]) this.#queue.cancel(requestId);
     }
     this.#state.live = live;
+    if (ended) this.#onStreamEnd?.();
+    void this.#syncPause();
   }
   async #receive(event: RedemptionEvent): Promise<void> {
     const connection = this.#connection;
