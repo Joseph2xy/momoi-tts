@@ -1,6 +1,17 @@
 # Momoi TTS
 
-Momoi TTS is a local Windows app that turns a viewer's named-character Channel Points question into a generated spoken reply. OBS receives audio through a transparent Browser source. Characters have independent prompts and assigned voices; Tyrone is the first character, not the app's name.
+An experiment with characters that have their own personalities and voices.
+Twitch viewers ask a character a question through Channel Points, and the app
+generates a spoken reply for the stream.
+
+It runs locally on Windows, with audio sent to OBS through a Browser source.
+Characters have separate instructions and assigned voices.
+
+**Work in progress.** The app still needs more development and testing.
+
+**Built with:** TypeScript, Twitch, OpenRouter, Fish Audio and OBS.
+
+[Architecture](docs/architecture.md) · [Testing and current limitations](docs/verification.md)
 
 ## First-time setup
 
