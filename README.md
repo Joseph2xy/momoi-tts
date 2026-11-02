@@ -1,6 +1,6 @@
-# MomoiTTS
+# Momoi TTS
 
-MomoiTTS is a local Windows app that turns a viewer's named-character Channel Points question into a generated spoken reply. OBS receives audio through a transparent Browser source. Characters have independent prompts and assigned voices; Tyrone is the first character, not the app's name.
+Momoi TTS is a local Windows app that turns a viewer's named-character Channel Points question into a generated spoken reply. OBS receives audio through a transparent Browser source. Characters have independent prompts and assigned voices; Tyrone is the first character, not the app's name.
 
 ## First-time setup
 
@@ -147,3 +147,7 @@ npm run package
 `test:offline` aliases `npm test`; both build the browser and run local mocks/fixtures without provider or account access. Run `dev:browser` and `dev:server` separately during development; restarts discard queued work. Packaging prepares a pinned Windows runtime and dependencies, verifies the runtime checksum and writes a self-contained ZIP in `.generated/releases/`.
 
 The source repository's `docs/architecture.md` owns implementation boundaries and `docs/verification.md` owns evidence and remaining live-validation limits. Those developer documents are not part of the product ZIP.
+
+## License
+
+Original project code is available under the [MIT License](LICENSE). Third-party dependencies, media and external data retain their respective rights and notices. Setup instructions and public-release polish are still being improved.

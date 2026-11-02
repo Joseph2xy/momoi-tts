@@ -51,5 +51,6 @@
     "endOfLine": "auto",
     "singleQuote": true,
     "printWidth": 100
-  }
+  },
+  "license": "MIT"
 }
