@@ -1,6 +1,6 @@
 # Controlled streamer trial
 
-This is a proposed runbook, not authorization to connect accounts, change Twitch/OBS settings or use providers. [README](../README.md) owns setup and controls; [verification](verification.md) owns actual results.
+This is a proposed runbook, not authorization to connect accounts, change Twitch/OBS settings or use providers. [User guide](../USER_GUIDE.md) owns setup and controls; [verification](verification.md) owns actual results.
 
 ## Before testing
 

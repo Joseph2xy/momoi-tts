@@ -27,6 +27,7 @@ try {
     'config/examples',
     '.generated/web',
     'README.md',
+    'USER_GUIDE.md',
     'START HERE.txt',
     'Launch MomoiTTS.cmd',
     'Update MomoiTTS.cmd',
@@ -68,6 +69,7 @@ try {
   });
   for (const file of [
     'README.md',
+    'USER_GUIDE.md',
     'START HERE.txt',
     'Launch MomoiTTS.cmd',
     'Update MomoiTTS.cmd',

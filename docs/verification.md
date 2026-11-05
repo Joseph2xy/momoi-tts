@@ -1,6 +1,6 @@
 # Verification
 
-Reviewed 2026-10-19. [README](../README.md) owns recipient instructions; [architecture](architecture.md) owns boundaries; [audit](audit.md) owns conclusions. Results below distinguish this audit from earlier evidence.
+Reviewed 2026-10-19. [User guide](../USER_GUIDE.md) owns recipient instructions; [architecture](architecture.md) owns boundaries; [audit](audit.md) owns conclusions. Results below distinguish this audit from earlier evidence.
 
 ## Recipient ZIP smoke test — 2026-10-19
 
@@ -56,7 +56,7 @@ The normal file picker/progress-dialog interaction remains unverified. Hashes ve
 
 ## Provider and live limits
 
-An earlier authorized Fish s2.1-pro-free request with a 51-byte phrase returned 50,154 MP3 bytes: first audio 4,310 ms, full response 4,550 ms. It does not establish listening quality, current browser/OBS output or guarantees. The paid HTTP 402 remains unresolved; API balance was not checked. Fish's public offer/model/API enum/pricing and OpenRouter routing documentation were refreshed without provider requests; current terms and links live in README.
+An earlier authorized Fish s2.1-pro-free request with a 51-byte phrase returned 50,154 MP3 bytes: first audio 4,310 ms, full response 4,550 ms. It does not establish listening quality, current browser/OBS output or guarantees. The paid HTTP 402 remains unresolved; API balance was not checked. Fish's public offer/model/API enum/pricing and OpenRouter routing documentation were refreshed without provider requests; current terms and links live in the user guide.
 
 Private development Twitch configuration remains invalid and unchanged. Real device authorization, reward ownership, settlement/refunds, live reconnect behavior and receiving-streamer operation remain unverified. Crash timing can refund a played reply; a remote reward write may succeed before a lost response. Actual recipient provider quality/latency, OBS tracks/monitoring, duplicate capture and overlap with other alerts need the separately authorized [trial](streamer-trial.md).
 

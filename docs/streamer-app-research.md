@@ -2,7 +2,7 @@
 
 Reviewed: 2026-10-13. This is the reusable reference for Twitch connection, setup, OBS handoff, everyday controls and distribution. It records public documentation/source observations, not installed-app or signed-in account tests. Read it before repeating comparative research; refresh only the facts needed for a new decision.
 
-[Handoff](../PROJECT_HANDOFF.md) owns agreed scope and blockers, [README](../README.md) owns current user behavior, [architecture](architecture.md) owns implementation boundaries, and [verification](verification.md) owns MomoiTTS test evidence. Recommendations here do not authorize features, account actions or paid usage.
+[Handoff](../PROJECT_HANDOFF.md) owns agreed scope and blockers, [User guide](../USER_GUIDE.md) owns current user behavior, [architecture](architecture.md) owns implementation boundaries, and [verification](verification.md) owns MomoiTTS test evidence. Recommendations here do not authorize features, account actions or paid usage.
 
 ## Findings by app
 

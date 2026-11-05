@@ -20,7 +20,7 @@ The standalone app controls its own audio queue. OBS owns routing and the mix; i
 | Topic | Current assessment |
 | --- | --- |
 | Character catalog authoring | Browser add/remove/rename remains an agreed recorded follow-up. Current prompt/voice/availability editing and trusted-file catalog operations remain. |
-| Provider selection and quality | OpenRouter generation is explicit; no final model or persona/voice evaluation is settled. Fish free access is provisional. README owns current offer/billing limits. |
+| Provider selection and quality | OpenRouter generation is explicit; no final model or persona/voice evaluation is settled. Fish free access is provisional. The user guide owns current offer/billing limits. |
 | Dialogue retention/review | Private durable logging serves scope. Retention and review tooling remain undecided; no history deletion or database/replay workflow is adopted. |
 | Preview/live contention | Manual previews can overlap live work. Measure actual contention before adding an intake/refund policy. |
 | Storage latency | Synchronous flushed logging may stall on slow disks. Measure before trading durability for buffering. |

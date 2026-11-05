@@ -1,6 +1,6 @@
 # Project instructions
 
-Read [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md) for current status and agreed scope. Use [README](README.md) for usage/configuration/commands, [architecture](docs/architecture.md) for current boundaries, and [verification](docs/verification.md) for evidence. These documents do not authorize unrelated work.
+Read [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md) for current status and agreed scope. Use [User guide](USER_GUIDE.md) for usage/configuration, [README](README.md#source-development) for development commands, [architecture](docs/architecture.md) for current boundaries, and [verification](docs/verification.md) for evidence. These documents do not authorize unrelated work.
 
 ## Collaboration and judgment
 
